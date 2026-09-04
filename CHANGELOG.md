@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.2.2] - 2026-09-05
 
 ### Security & Architecture (ADR-0001)
 - **Zero-disk PAM credential transit**: Completely eliminated `/run/user/<uid>/sigil-pam-token` plaintext token file. `pam_sigil.so` now connects directly to the daemon's native Unix socket in memory with `SO_PEERCRED` kernel credential verification and immediate memory zeroization.
@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - **Process memory anti-forensics**: Enabled `PR_SET_DUMPABLE=0` (blocking `ptrace` and `/proc/$pid/mem` snooping) and `RLIMIT_CORE=0` (disabling core dumps containing keys) on daemon startup.
 - **In-memory IPC unlock protocol**: Added `UnlockWithPassword` command to Native IPC server and client for secure memory-only unlocking.
 - **ADR adoption**: Added architecture decision records in `docs/adr/` documenting the Zero-Compromise Security Architecture (ADR-0001).
+- **Cleaned legacy baggage**: Removed dead `inotify` dependency, removed `rand` from daemon, unified CLI KDF parsing with `sigil-store`, corrected `SECURITY.md` lock semantics.
 
 ## [1.2.1] - 2026-09-05
 

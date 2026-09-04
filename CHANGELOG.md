@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-09-08
+
+### Architecture & Lifecycle (ADR-0002)
+- **Envelope Multi-Slot Vault Architecture**: Vault payload is now decoupled from user passwords, encrypted by a dedicated 256-bit `VolumeKey` (XChaCha20-Poly1305) and wrapped into independent key slots (`vault.slots/`). Password rotation takes sub-100ms without rewriting bulk data. Includes seamless, transparent on-load migration from legacy v1 format.
+- **Race-Free Socket Activation**: Added `systemd/user/sigil.socket` on `%t/sigil/native.sock`, completely eliminating cold-boot timing races between display manager PAM authentication and daemon initialization.
+- **Zero-Touch Provisioning**: On first desktop login, empty vaults are auto-provisioned transparently via PAM into an active, unlocked state with zero CLI configuration or user dialog prompts.
+- **Dual-Trigger Session Eviction**: `sigil` now monitors both `org.freedesktop.login1.Session.Lock` signals and session `Active=false` property changes, instantly zeroizing `VolumeKey` and memory caches during screen locks and fast user switching.
+- **Cascade Password Synchronization & Self-Healing**: `pam_sigil.so` implements `pam_sm_chauthtok` to atomically re-encrypt Slot 0 when `passwd` runs. Out-of-band administrator resets are gracefully recovered via `LockState::Desynced` self-healing channels.
+- **Purged CLI & Keyfile Compromises**: Completely removed `sigil-cli` and unencrypted `vault.key` keyfile compromises. Standard desktop operations now standardize on `secret-tool` and `busctl`.
+- **Domain Renaming**: Renamed `sigil-core` to `sigil-domain` to strictly reflect domain entities, value objects, and error models under DDD best practices.
+- **Hardening Enhancements**: Integrated POSIX thread-safe `getpwnam_r` in `sigil-pam` and kernel `mlockall(MCL_CURRENT | MCL_FUTURE)` memory anti-paging in daemon startup.
+
 ## [1.2.2] - 2026-09-05
 
 ### Security & Architecture (ADR-0001)

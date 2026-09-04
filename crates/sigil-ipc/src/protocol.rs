@@ -1,4 +1,4 @@
-use sigil_core::LockState;
+use sigil_domain::LockState;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -18,9 +18,20 @@ pub enum IpcRequest {
     GetLockStatus,
     /// Lock the vault, clearing in-memory keys
     Lock,
-    /// Unlock the vault using a password provided over IPC (e.g. from PAM or prompter)
+    /// Unlock the vault using a password provided over IPC (e.g. from PAM or prompter).
+    /// If the vault is uninitialized, performs zero-touch automated provisioning.
     UnlockWithPassword {
         password: String,
+    },
+    /// Rotate the primary password slot (Slot 0) when the user modifies their OS password.
+    RotateSlotPassword {
+        old_password: String,
+        new_password: String,
+    },
+    /// Self-healing re-synchronization invoked after an out-of-band/admin password reset.
+    RecoverAndSyncWithCurrentPassword {
+        recovery_secret: String,
+        new_system_password: String,
     },
     /// Ping the daemon to test connectivity
     Ping,
@@ -36,6 +47,8 @@ pub enum IpcResponse {
     Success,
     /// Operation failed because the service is locked
     Locked,
+    /// Operation failed because the vault credentials are desynchronized
+    Desynced,
     /// Operation cancelled by user or timeout
     Cancelled,
     /// Access denied (caller UID mismatch or permission issue)

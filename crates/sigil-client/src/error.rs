@@ -11,6 +11,9 @@ pub enum ClientError {
     #[error("Credential vault is locked")]
     Locked,
 
+    #[error("Credential vault is desynchronized")]
+    Desynced,
+
     #[error("Operation was cancelled by user")]
     Cancelled,
 
@@ -21,7 +24,7 @@ pub enum ClientError {
     DaemonError(String),
 
     #[error("Protocol / framing error: {0}")]
-    Protocol(#[from] sigil_core::SigilError),
+    Protocol(#[from] sigil_domain::SigilError),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

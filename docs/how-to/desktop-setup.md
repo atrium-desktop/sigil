@@ -1,88 +1,77 @@
 # Desktop Environment & Compositor Setup
 
-This topic guide explains how to configure `sigil` across modern Wayland compositors (Hyprland, Sway, River) and desktop environments, replacing GNOME Keyring or KWallet.
+This guide explains how to integrate `sigil` into modern desktop environments and Wayland compositors (Atrium, Tessera, Hyprland, Sway, River) as the primary, zero-friction credential provider replacing GNOME Keyring and KWallet.
 
 ---
 
-## 1. Session Autostart
+## 1. Systemd User Session Integration (Best Practice)
 
-`sigil` is designed to run as a systemd user service.
+In modern Linux distributions, `sigil` is managed via systemd user units with on-demand socket activation.
 
-### Recommended: systemd User Service
-
-1. Enable and start the service for your user session:
-   ```bash
-   systemctl --user enable --now sigil.service
-   ```
-2. Verify that `sigil` acquired the D-Bus Secret Service name:
-   ```bash
-   busctl --user status org.freedesktop.secrets
-   ```
-
-### Non-systemd / Standalone Wayland Compositor Autostart
-
-If your compositor does not manage a full systemd user session:
-
-#### Hyprland (`~/.config/hypr/hyprland.conf`)
-```ini
-exec-once = sigil
-```
-
-#### Sway (`~/.config/sway/config`)
-```ini
-exec sigil
-```
-
----
-
-## 2. PAM Login & Screensaver Integration
-
-The `pam_sigil.so` PAM module allows `sigil` to unlock automatically upon login and whenever you unlock your screensaver.
-
-### Login PAM Stack
-
-Add the following line to your system's auth stack:
-
-- **Arch Linux**: `/etc/pam.d/system-login`
-- **Debian / Ubuntu**: `/etc/pam.d/common-auth`
-- **Fedora**: `/etc/pam.d/login`
-
-```pam
-auth optional pam_sigil.so
-```
-
-### Screensaver Re-Unlock Stack
-
-When your screen locks, `sigil` receives the `org.freedesktop.login1.Session.Lock` signal and immediately clears master keys from memory.
-
-To unlock automatically when you type your password to dismiss the screen locker, configure the locker's PAM file:
-
-#### Swaylock (`/etc/pam.d/swaylock`)
-```pam
-# Include default auth
-auth include system-auth
-# Automatically pass unlock password to sigil via memory-only socket
-auth optional pam_sigil.so
-```
-
-#### Hyprlock (`/etc/pam.d/hyprlock`)
-```pam
-auth include system-auth
-auth optional pam_sigil.so
-```
-
----
-
-## 3. Replacing GNOME Keyring & KWallet
-
-To prevent D-Bus name conflicts on `org.freedesktop.secrets`, mask or disable legacy keyrings:
+### Enable the Units
 
 ```bash
-# Mask GNOME Keyring services in systemd user session
-systemctl --user mask gnome-keyring-daemon.service gnome-keyring-daemon.socket
+# Enable the socket unit for seamless on-demand start during PAM login
+systemctl --user enable sigil.socket
 
-# Disable PAM hooks for gnome-keyring if present
-# Edit /etc/pam.d/common-auth or /etc/pam.d/login and comment out pam_gnome_keyring.so
+# Start or reload user units
+systemctl --user daemon-reload
+systemctl --user start sigil.socket
 ```
 
-For full troubleshooting steps, see [Troubleshooting D-Bus Conflicts](troubleshoot-dbus-conflicts.md).
+### Verify Registration
+
+Once your session starts and a client or PAM accesses the socket, verify that `sigil` has acquired the D-Bus Secret Service name:
+
+```bash
+busctl --user status org.freedesktop.secrets
+```
+
+You should see `sigil` actively serving the object paths:
+- `/org/freedesktop/secrets`
+- `/org/freedesktop/secrets/collection/login`
+- `/org/freedesktop/secrets/prompt/default`
+
+---
+
+## 2. PAM Login & Lock Screen Integration
+
+### Automatic First-Login & Wakeup
+With `pam_sigil.so` configured:
+1. **Initial Login**: Users entering their password at the display manager (Greetd / TTY) automatically provision and unlock their vault.
+2. **Lock Screen Dismissal**: When unlocking with `tessera-lock`, `swaylock`, or `hyprlock`, PAM re-transmits the password directly over the native socket in volatile memory.
+
+### Dual-Trigger Session Zeroization (Away-from-Desk)
+When your display locks or you switch desktop sessions:
+- `systemd-logind` broadcasts `org.freedesktop.login1.Session.Lock`.
+- The session `Active` attribute drops to `false`.
+- `sigil` intercepts these signals and wipes the `VolumeKey` and decrypted caches using `zeroize::Zeroize`.
+
+---
+
+## 3. Sandboxed Application Integration (Flatpak / Snap)
+
+Sandboxed applications do not access raw D-Bus collections directly. Instead, they interact with the Portal Secret API:
+
+```text
+Flatpak App ──► xdg-desktop-portal ──► xdg-desktop-portal-atrium ──► sigil (native IPC)
+```
+
+`sigil` derives mathematical orthogonal keys per application using HKDF-SHA256 (`derive_app_secret`). Sandboxed apps are mathematically partitioned and cannot observe or decrypt secrets belonging to other applications.
+
+---
+
+## 4. Replacing GNOME Keyring & KWallet
+
+To avoid D-Bus conflicts over `org.freedesktop.secrets`:
+
+```bash
+# Mask legacy keyrings in the systemd user session
+systemctl --user mask gnome-keyring-daemon.service gnome-keyring-daemon.socket
+systemctl --user mask kwalletd5.service kwallet-pam.service
+
+# Verify no duplicate Secret Service providers
+grep -rn "org.freedesktop.secrets" /usr/share/dbus-1/services/ ~/.local/share/dbus-1/services/
+```
+
+Ensure only `org.freedesktop.secrets.service` pointing to `sigil` is active.

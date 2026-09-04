@@ -1,41 +1,39 @@
 # Packaging Guide
 
-This guide details how downstream package maintainers and system integrators can build, package, and distribute `sigil` across Linux distributions (Arch Linux, Debian/Ubuntu, Fedora/RHEL, and NixOS).
+This guide details how downstream package maintainers and distribution architects can build, package, and distribute `sigil` across Linux distributions (Arch Linux, Debian/Ubuntu, Fedora/RHEL, and NixOS).
 
 ---
 
 ## 1. Package Artifacts & File Placements
 
-A full distribution package of `sigil` produces the following binaries, libraries, and integration files:
+Under the modern zero-friction envelope architecture (ADR-0002), `sigil` operates as an integrated desktop infrastructure daemon with zero requirement for an administrative CLI. All credential queries are serviced via standard freedesktop.org interfaces (interoperable with `secret-tool`, browsers, and portals).
 
-| Artifact | Source Location | Standard Installation Target | Permissions |
+| Artifact | Source Location | Standard Installation Target | Mode |
 |---|---|---|:---:|
 | Daemon Binary | `target/release/sigil` | `/usr/bin/sigil` | `0755` |
-| CLI Utility | `target/release/sigil-cli` | `/usr/bin/sigil-cli` | `0755` |
-| GUI Prompter | `target/release/sigil-prompter` | `/usr/bin/sigil-prompter` | `0755` |
-| PAM Module | `target/release/libpam_sigil.so` | `/usr/lib/security/pam_sigil.so` | `0755` |
-| systemd User Unit | `systemd/user/sigil.service` | `/usr/lib/systemd/user/sigil.service` | `0644` |
+| Native GUI Prompter | `target/release/sigil-prompter` | `/usr/bin/sigil-prompter` | `0755` |
+| PAM Security Module | `target/release/libpam_sigil.so` | `/usr/lib/security/pam_sigil.so` | `0755` |
+| systemd User Service | `systemd/user/sigil.service` | `/usr/lib/systemd/user/sigil.service` | `0644` |
+| systemd Socket Unit | `systemd/user/sigil.socket` | `/usr/lib/systemd/user/sigil.socket` | `0644` |
 | D-Bus Service | `dbus/org.freedesktop.secrets.service` | `/usr/share/dbus-1/services/org.freedesktop.secrets.service` | `0644` |
 
-*Note*: On Debian/Ubuntu systems, PAM modules may reside in `/lib/x86_64-linux-gnu/security/` or `/lib/security/`.
+*Note on Debian/Ubuntu*: PAM modules may reside in `/usr/lib/x86_64-linux-gnu/security/` or `/lib/x86_64-linux-gnu/security/`.
 
 ---
 
 ## 2. Dependencies
 
 ### Build Dependencies
-
-- Rust toolchain >= 1.80 (cargo, rustc)
+- Rust toolchain >= 1.80 (`cargo`, `rustc`)
 - C compiler (`gcc` or `clang`)
 - PAM development headers (`pam-devel` on Fedora/Arch; `libpam0g-dev` on Debian/Ubuntu)
 - `pkg-config`
+- Wayland / Vulkan client libraries (for `sigil-prompter` native rendering via Optics)
 
 ### Runtime Dependencies
-
-- `glibc` or `musl`
-- `pam` (Linux PAM)
-- `dbus` / `dbus-broker` (session bus)
-- `systemd` (user session manager)
+- Linux PAM (`pam`)
+- Session bus daemon (`dbus` / `dbus-broker`)
+- Session manager (`systemd`)
 
 ---
 
@@ -44,19 +42,20 @@ A full distribution package of `sigil` produces the following binaries, librarie
 ### Arch Linux (`PKGBUILD`)
 
 ```bash
-# Maintainer: Sigil Project <dev@atrium-desktop.org>
+# Maintainer: Atrium Desktop Team <dev@atrium-desktop.org>
 pkgname=sigil
-pkgver=1.2.2
+pkgver=1.3.0
 pkgrel=1
-pkgdesc="Secure, memory-first Freedesktop Secret Service implementation"
+pkgdesc="Industrial-grade, zero-friction Freedesktop Secret Service infrastructure daemon"
 arch=('x86_64' 'aarch64')
 url="https://github.com/atrium-desktop/sigil"
 license=('MIT')
 depends=('pam' 'systemd')
 makedepends=('cargo' 'pkgconf')
 optdepends=(
-  'swaylock: automatic vault unlock upon screensaver dismissal'
-  'hyprlock: screensaver unlock integration'
+  'libsecret: for standard CLI inspection via secret-tool'
+  'swaylock: screen unlock integration'
+  'hyprlock: screen unlock integration'
 )
 provides=('org.freedesktop.secrets')
 conflicts=('gnome-keyring')
@@ -72,7 +71,6 @@ prepare() {
 build() {
   cd "$pkgname-$pkgver"
   export RUSTUP_TOOLCHAIN=stable
-  export CARGO_TARGET_DIR=target
   cargo build --frozen --release --workspace
 }
 
@@ -84,24 +82,20 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  
+
   # Binaries
   install -Dm755 target/release/sigil "$pkgdir/usr/bin/sigil"
-  install -Dm755 target/release/sigil-cli "$pkgdir/usr/bin/sigil-cli"
   install -Dm755 target/release/sigil-prompter "$pkgdir/usr/bin/sigil-prompter"
 
   # PAM module
   install -Dm755 target/release/libpam_sigil.so "$pkgdir/usr/lib/security/pam_sigil.so"
 
-  # systemd user service
+  # systemd user units
   install -Dm644 systemd/user/sigil.service "$pkgdir/usr/lib/systemd/user/sigil.service"
+  install -Dm644 systemd/user/sigil.socket "$pkgdir/usr/lib/systemd/user/sigil.socket"
 
   # D-Bus service definition
   install -Dm644 dbus/org.freedesktop.secrets.service "$pkgdir/usr/share/dbus-1/services/org.freedesktop.secrets.service"
-
-  # Documentation and licenses
-  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
-  install -Dm644 SECURITY.md "$pkgdir/usr/share/doc/$pkgname/SECURITY.md"
 }
 ```
 
@@ -111,30 +105,27 @@ package() {
 
 ```spec
 Name:           sigil
-Version:        1.2.2
+Version:        1.3.0
 Release:        1%{?dist}
-Summary:        Memory-first Secret Service daemon and PAM module
+Summary:        Industrial-grade, zero-friction Freedesktop Secret Service daemon
 
 License:        MIT
 URL:            https://github.com/atrium-desktop/sigil
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz
 
 BuildRequires:  cargo
-BuildRequires:  rust
+BuildRequires:  rust >= 1.80
 BuildRequires:  pam-devel
 BuildRequires:  pkgconfig
 BuildRequires:  systemd-rpm-macros
 
 Requires:       pam
 Requires:       systemd
-
-Provides:       desktop-notification-daemon
 Provides:       org.freedesktop.secrets
 
 %description
-sigil is a secure, memory-first Freedesktop Secret Service daemon
-providing end-to-end encryption, zero-disk PAM unlock, and sandboxed
-per-app Portal secrets.
+Sigil is an industrial-grade credential management service providing full Freedesktop
+Secret Service API support alongside zero-touch auto-provisioning and memory zeroization.
 
 %prep
 %autosetup -p1
@@ -142,119 +133,120 @@ per-app Portal secrets.
 %build
 cargo build --release --workspace
 
+%check
+cargo test --workspace
+
 %install
+# Binaries
 install -D -p -m 0755 target/release/sigil %{buildroot}%{_bindir}/sigil
-install -D -p -m 0755 target/release/sigil-cli %{buildroot}%{_bindir}/sigil-cli
 install -D -p -m 0755 target/release/sigil-prompter %{buildroot}%{_bindir}/sigil-prompter
+
+# PAM module
 install -D -p -m 0755 target/release/libpam_sigil.so %{buildroot}%{_libdir}/security/pam_sigil.so
+
+# systemd user units
 install -D -p -m 0644 systemd/user/sigil.service %{buildroot}%{_userunitdir}/sigil.service
+install -D -p -m 0644 systemd/user/sigil.socket %{buildroot}%{_userunitdir}/sigil.socket
+
+# D-Bus service
 install -D -p -m 0644 dbus/org.freedesktop.secrets.service %{buildroot}%{_datadir}/dbus-1/services/org.freedesktop.secrets.service
 
-%check
-cargo test --release --workspace
-
 %post
-%systemd_user_post sigil.service
+%systemd_user_post sigil.socket
 
 %preun
-%systemd_user_preun sigil.service
+%systemd_user_preun sigil.socket
 
 %files
-%license LICENSE*
-%doc README.md SECURITY.md
+%license LICENSE
+%doc README.md
 %{_bindir}/sigil
-%{_bindir}/sigil-cli
 %{_bindir}/sigil-prompter
 %{_libdir}/security/pam_sigil.so
 %{_userunitdir}/sigil.service
+%{_userunitdir}/sigil.socket
 %{_datadir}/dbus-1/services/org.freedesktop.secrets.service
 ```
 
 ---
 
-### Debian / Ubuntu (`debian/rules` & structure)
+### Debian / Ubuntu (`debian/rules`)
 
-For Debian packages, maintainers typically split packages into:
-1. `sigil` (daemon, CLI, systemd, D-Bus)
-2. `libpam-sigil` (the PAM security module)
-3. `sigil-prompter` (standalone prompt dialog)
+```makefile
+#!/usr/bin/make -f
+export DH_VERBOSE = 1
 
-#### `debian/control` Example
-```control
-Source: sigil
-Section: admin
-Priority: optional
-Maintainer: Atrium Desktop Team <dev@atrium-desktop.org>
-Build-Depends: debhelper-compat (= 13), cargo, rustc, libpam0g-dev, pkg-config
-Standards-Version: 4.6.2
+%:
+	dh $@ --buildsystem=cargo
 
-Package: sigil
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-sigil (= ${binary:Version})
-Provides: org.freedesktop.secrets
-Description: Memory-first desktop secret service daemon
- sigil implements the org.freedesktop.secrets API with memory-only
- unlock tokens and per-application isolation.
+override_dh_auto_install:
+	# Install binaries
+	install -D -m 0755 target/release/sigil debian/sigil/usr/bin/sigil
+	install -D -m 0755 target/release/sigil-prompter debian/sigil/usr/bin/sigil-prompter
 
-Package: libpam-sigil
-Section: admin
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: PAM module for sigil automatic memory unlock
- Transmits login passwords directly to sigil over native Unix sockets
- without creating files on disk.
+	# Install PAM module (multi-arch security directory)
+	install -D -m 0755 target/release/libpam_sigil.so debian/sigil/lib/$(DEB_HOST_MULTIARCH)/security/pam_sigil.so
+
+	# Install systemd user units
+	install -D -m 0644 systemd/user/sigil.service debian/sigil/usr/lib/systemd/user/sigil.service
+	install -D -m 0644 systemd/user/sigil.socket debian/sigil/usr/lib/systemd/user/sigil.socket
+
+	# Install D-Bus service
+	install -D -m 0644 dbus/org.freedesktop.secrets.service debian/sigil/usr/share/dbus-1/services/org.freedesktop.secrets.service
 ```
 
 ---
 
-### Nix / NixOS (`default.nix`)
+### NixOS Module Example
 
 ```nix
-{ lib, rustPlatform, pam, pkg-config }:
+{ config, lib, pkgs, ... }:
 
-rustPlatform.buildRustPackage rec {
-  pname = "sigil";
-  version = "1.2.2";
+with lib;
 
-  src = ./.;
-
-  cargoLock = {
-    lockFile = ./Cargo.lock;
+let
+  cfg = config.services.sigil;
+in {
+  options.services.sigil = {
+    enable = mkEnableOption "Sigil Freedesktop Secret Service daemon";
   };
 
-  nativeBuildInputs = [ pkg-config ];
-  buildInputs = [ pam ];
+  config = mkIf cfg.enable {
+    security.pam.services.system-login.text = mkDefault ''
+      auth     optional ${pkgs.sigil}/lib/security/pam_sigil.so
+      password optional ${pkgs.sigil}/lib/security/pam_sigil.so
+      session  optional ${pkgs.sigil}/lib/security/pam_sigil.so
+    '';
 
-  postInstall = ''
-    install -Dm755 target/release/libpam_sigil.so $out/lib/security/pam_sigil.so
-    install -Dm644 systemd/user/sigil.service $out/lib/systemd/user/sigil.service
-    install -Dm644 dbus/org.freedesktop.secrets.service $out/share/dbus-1/services/org.freedesktop.secrets.service
-  '';
+    systemd.user.sockets.sigil = {
+      description = "Sigil Credential Service Native Activation Socket";
+      wantedBy = [ "sockets.target" ];
+      socketConfig = {
+        ListenStream = "%t/sigil/native.sock";
+        SocketMode = "0600";
+        DirectoryMode = "0700";
+      };
+    };
 
-  meta = with lib; {
-    description = "Hardened, memory-first Freedesktop Secret Service daemon";
-    homepage = "https://github.com/atrium-desktop/sigil";
-    license = licenses.mit;
-    platforms = platforms.linux;
+    systemd.user.services.sigil = {
+      description = "Sigil Secret Service Daemon";
+      after = [ "sigil.socket" ];
+      wants = [ "sigil.socket" ];
+      serviceConfig = {
+        ExecStart = "${pkgs.sigil}/bin/sigil";
+        Type = "dbus";
+        BusName = "org.freedesktop.secrets";
+      };
+    };
   };
 }
 ```
 
 ---
 
-## 4. Post-Installation & User Session Triggers
+## 4. Packaging Verification Checklist
 
-1. **Reload systemd user daemon**:
-   ```bash
-   systemctl --user daemon-reload
-   ```
-2. **Enable automatic startup on session login**:
-   ```bash
-   systemctl --user enable sigil.service
-   ```
-3. **D-Bus Coexistence Notice**:
-   Because only one provider may own `org.freedesktop.secrets` on the user session bus, package post-install scripts should advise users to mask or disable conflicting services:
-   ```bash
-   systemctl --user mask gnome-keyring-daemon.service
-   ```
-   For detailed migration steps, see [Troubleshooting D-Bus Conflicts](troubleshoot-dbus-conflicts.md).
+1. [ ] Socket activation is configured: `sigil.socket` enabled in user presets (`/usr/lib/systemd/user-preset/`).
+2. [ ] Binary permissions are `0755` and PAM module permissions are `0755`.
+3. [ ] D-Bus service triggers activation on `org.freedesktop.secrets`.
+4. [ ] Legacy `gnome-keyring` conflicts are handled cleanly.

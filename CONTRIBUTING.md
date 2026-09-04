@@ -44,7 +44,7 @@ cryptographic correctness and memory-safety implications:
 | File | What to verify |
 |------|---------------|
 | `sigil/src/session.rs` | HKDF parameters, AES key zeroization, DH validation |
-| `sigil-core/src/vault.rs` | Nonce uniqueness, Argon2 parameters, zeroize on drop |
+| `sigil-store/src/file_store.rs` | Nonce uniqueness, Argon2 parameters, zeroize on drop |
 | `sigil/src/ipc.rs` | Socket permissions, timeout handling |
 | `sigil-pam/src/lib.rs` | File permissions (0600), ownership, prompt delete-on-read |
 

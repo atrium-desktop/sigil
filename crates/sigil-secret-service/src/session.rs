@@ -1,4 +1,4 @@
-use sigil_core::Result;
+use sigil_domain::Result;
 use sigil_crypto::{
     decrypt_secret_service_aes128, encrypt_secret_service_aes128,
 };

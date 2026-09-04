@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "crates/sigil-core",
+    "crates/sigil-domain",
     "crates/sigil-crypto",
     "crates/sigil-store",
     "crates/sigil-service",
@@ -8,7 +8,6 @@ members = [
     "crates/sigil-client",
     "crates/sigil-secret-service",
     "crates/sigil",
-    "crates/sigil-cli",
     "crates/sigil-prompter",
     "crates/sigil-pam",
 ]

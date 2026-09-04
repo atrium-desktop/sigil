@@ -1,44 +1,74 @@
-# CLI Reference (`sigil-cli`)
+# Standard CLI Tooling Reference (`secret-tool` & `busctl`)
 
-`sigil-cli` is the administrative command-line utility for managing the `sigil` vault directly on disk.
+Under the modern zero-friction architecture (ADR-0002), `sigil` is a pure session infrastructure daemon. It intentionally provides **no custom proprietary CLI utility**, as proprietary CLIs that mutate vault files on disk create state corruption, race conditions with running daemons, and security bypasses.
 
-## Usage
+Instead, `sigil` strictly adheres to the Freedesktop Secret Service standard and exposes its interface through standard Linux desktop tools: `secret-tool` (from `libsecret`) and `busctl` (from `systemd`).
 
-```bash
-sigil-cli <COMMAND> [OPTIONS]
-```
+---
 
-## Commands
+## 1. Using `secret-tool` (Standard Desktop CLI)
 
-### `init`
+`secret-tool` is the standard tool available on all Linux distributions for storing, retrieving, and searching session credentials.
 
-Initializes a new vault if none exists.
+### Storing a Secret
 
 ```bash
-# Password-protected vault (prompts securely for password)
-sigil-cli init
-
-# Keyfile-backed vault (generates random 256-bit key in vault.key)
-sigil-cli init --no-password
+# Prompts for secret on stdin (or echo password | secret-tool store ...)
+secret-tool store --label="GitHub Access Token" \
+    service github.com \
+    account alice@example.com
 ```
 
-### `change-password`
-
-Prompts for the current password, verifies decryption, prompts for a new password, and atomically re-encrypts the vault with fresh salt and Argon2id parameters.
+### Retrieving a Secret
 
 ```bash
-sigil-cli change-password
+secret-tool lookup service github.com account alice@example.com
 ```
 
-### `reset`
-
-Deletes all existing vault files (`vault.enc`, `vault.salt`, `vault.kdf`, `vault.key`) after explicit user confirmation.
+### Searching for Credentials
 
 ```bash
-sigil-cli reset
+secret-tool search service github.com
 ```
 
-## Environment Variables
+### Deleting a Secret
 
-- `SIGIL_DATA_DIR`: Override the default vault data directory (default: `~/.local/share/sigil`).
-- `SIGIL_SOCKET_PATH`: Override the default Native IPC socket path (default: `$XDG_RUNTIME_DIR/sigil/native.sock`).
+```bash
+secret-tool clear service github.com account alice@example.com
+```
+
+---
+
+## 2. Inspecting the Daemon with `busctl`
+
+You can directly query daemon health and D-Bus properties:
+
+### Check Owning Process
+```bash
+busctl --user status org.freedesktop.secrets
+```
+
+### List Collections
+```bash
+busctl --user call org.freedesktop.secrets \
+    /org/freedesktop/secrets \
+    org.freedesktop.DBus.Properties Get ss \
+    org.freedesktop.Secret.Service Collections
+```
+
+### Lock the Vault Immediately
+```bash
+busctl --user call org.freedesktop.secrets \
+    /org/freedesktop/secrets \
+    org.freedesktop.Secret.Service Lock ao 1 /org/freedesktop/secrets/collection/login
+```
+
+---
+
+## 3. Supported Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `SIGIL_DATA_DIR` | Custom directory path for vault storage | `~/.local/share/sigil` (`$XDG_DATA_HOME/sigil`) |
+| `SIGIL_SOCKET_PATH` | Path for the private native IPC socket | `/run/user/<uid>/sigil/native.sock` (`$XDG_RUNTIME_DIR/sigil/native.sock`) |
+| `SIGIL_PASSWORD` | Automated unlock password for headless/CI/IoT environments | *(Unset)* |

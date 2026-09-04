@@ -1,4 +1,4 @@
-use sigil_core::{SigilError, Result, SecretBytes};
+use sigil_domain::{Result, SecretBytes, SigilError};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::fmt;

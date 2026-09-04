@@ -1,4 +1,4 @@
-use sigil_core::{SigilError, LockState, Namespace, Purpose, Result, SecretBytes, Subject};
+use sigil_domain::{LockState, Namespace, Purpose, Result, SecretBytes, SigilError, Subject};
 use sigil_crypto::{derive_app_secret, derive_portal_secret, MasterKey};
 use sigil_store::{FileVaultStore, StoredCollection, StoredItem, StoredVaultData};
 use std::collections::HashMap;
@@ -68,14 +68,12 @@ impl SigilService {
 
     pub async fn lock_state(&self) -> LockState {
         let inner = self.inner.read().await;
-        if !inner.store.exists() && !inner.store.is_keyfile_mode() {
-            if inner.master_key.is_some() {
-                LockState::Unlocked
-            } else {
-                LockState::Uninitialized
-            }
-        } else if inner.master_key.is_some() {
+        if inner.master_key.is_some() {
             LockState::Unlocked
+        } else if !inner.store.exists() {
+            LockState::Uninitialized
+        } else if inner.store.is_desynced() {
+            LockState::Desynced
         } else {
             LockState::Locked
         }
@@ -151,7 +149,30 @@ impl SigilService {
             let inner = self.inner.read().await;
             inner.store.clone()
         };
-        let key = store.derive_key_with_password(password)?;
+        // Zero-touch automatic provisioning if vault does not exist yet
+        let key = if !store.exists() {
+            info!("No existing vault found. Auto-provisioning initial envelope vault with password.");
+            store.initialize_with_password(password)?
+        } else {
+            store.unlock_with_password(password)?
+        };
+        self.unlock_with_master_key(key).await
+    }
+
+    pub async fn rotate_password(&self, old_password: &str, new_password: &str) -> Result<()> {
+        let store = {
+            let inner = self.inner.read().await;
+            inner.store.clone()
+        };
+        store.rotate_password(old_password, new_password)
+    }
+
+    pub async fn recover_and_sync(&self, recovery_secret: &str, new_password: &str) -> Result<()> {
+        let store = {
+            let inner = self.inner.read().await;
+            inner.store.clone()
+        };
+        let key = store.recover_and_sync(recovery_secret, new_password)?;
         self.unlock_with_master_key(key).await
     }
 

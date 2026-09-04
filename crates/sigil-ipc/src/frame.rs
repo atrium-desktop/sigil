@@ -1,5 +1,5 @@
 use crate::protocol::{IpcRequest, IpcResponse};
-use sigil_core::{SigilError, Result};
+use sigil_domain::{Result, SigilError};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 const MAX_FRAME_SIZE: usize = 64 * 1024; // 64 KB limit for safety

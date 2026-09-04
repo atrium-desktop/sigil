@@ -1,70 +1,88 @@
-# Vault Unlock Strategies
+# Vault Lifecycle and Unlock Strategies
 
-`sigil` offers two vault protection modes and two unlock mechanisms. Choose based on your
-disk encryption setup and tolerance for friction.
+In legacy systems, credential managers forced users to make an unwelcome choice:
+- **High Friction**: Endure separate passwords, constant unlock dialogs, and manual initializations; OR
+- **Security Compromise**: Store an unencrypted keyfile (`vault.key`) on disk, rendering security dependent entirely on full-disk encryption and leaving credentials completely unprotected while logged in.
 
----
-
-## Two Vault Protection Modes
-
-### Password Mode
-
-The vault is encrypted with a key derived from a password via Argon2id. Without the password,
-the vault file (`vault.enc`) cannot be decrypted — even if an attacker has physical access to
-the disk.
-
-**When it matters**: the password protects against disk theft when there is no full-disk
-encryption (FDE).
-
-### No-Password Mode (keyfile)
-
-The vault is encrypted with a randomly generated 256-bit key stored in `vault.key` (mode
-`0600`) alongside the vault file. No password is ever entered. The only protection is OS
-file permissions.
-
-**Practical implication**: if an attacker gets your disk, they get both `vault.enc` and
-`vault.key` and can decrypt the vault immediately. The vault is only as secure as your
-filesystem.
-
-**When it is safe**: when full-disk encryption (LUKS or equivalent) is active. LUKS
-encrypts the entire disk — an attacker cannot read `vault.key` without the LUKS passphrase,
-so the vault remains protected. `sigil`'s own encryption becomes a redundant inner layer that
-adds friction with no security benefit.
+`sigil` **rejects this compromise entirely**. Under ADR-0002, `sigil` implements an uncompromising, zero-friction lifecycle based on **Envelope Key Slots**, **Systemd Socket Activation**, and **Session-Bound Memory Eviction**.
 
 ---
 
-## Recommendation
+## The Zero-Friction Standard Lifecycle
 
-```
-Have full-disk encryption (LUKS)?
-  YES → use no-password mode  (zero friction, security comes from FDE)
-  NO  → use password mode     (vault password = login password via PAM)
+Users interact with exactly one credential: their **system login passphrase**. The credential vault adapts automatically across the entire lifecycle:
+
+```text
+                     User interacts with a single system password
+                                          │
+       ┌──────────────────────────────────┼──────────────────────────────────┐
+       ▼                                  ▼                                  ▼
+[1. First Login Provisioning]    [2. Daily Unlock & Wakeup]      [3. Away-from-Desk Protection]
+New machine or user created      Display manager / lock screen   Screen locked / user switched
+pam_sigil detects empty vault    pam_sigil passes token via IPC  logind sends Lock / Active=false
+sigil auto-initializes Slot 0    sigil restores VolumeKey in RAM sigil immediately zeroes memory
+【Zero Config / Zero Popups】    【Transparent / Sub-second】    【Zero-Trace / Defense in Depth】
+                                          ▲
+                                          │ [4. Password Synchronization]
+                                          │ User runs `passwd` or changes OS password
+                                          │ pam_sigil captures chauthtok event
+                                          │ Transparently rewrenches Slot 0
 ```
 
-This matches how GNOME Keyring works: the "login" keyring uses the login password as the key,
-but users on encrypted disks often set no separate keyring password and rely on FDE instead.
-SSH private keys without passphrases follow the same logic.
+---
+
+## Lifecycle Stages in Detail
+
+### 1. First-Login Zero-Touch Provisioning
+When a user logs into a freshly installed desktop (or a newly created user account):
+1. The user authenticates at the display manager (Greetd / TTY).
+2. `pam_systemd` establishes the user runtime environment (`/run/user/<uid>`).
+3. `pam_sigil.so` connects to the native socket `/run/user/<uid>/sigil/native.sock`.
+4. `systemd.socket` activates `sigil.service` on-demand.
+5. The daemon detects that no vault exists (`LockState::Uninitialized`):
+   - Generates a 256-bit CSPRNG `VolumeKey`.
+   - Initializes an empty encrypted `vault.data`.
+   - Derives a key from the user's login password via Argon2id and seals the `VolumeKey` into `vault.slots/slot-0.enc`.
+   - Transitions directly to `LockState::Unlocked`.
+6. **Result**: The user enters the desktop immediately with an active, secure vault. No CLI initialization, no popups.
+
+### 2. Daily Unlock & Transparent Screen Wakeup
+1. **Boot / Cold Login**: The password entered at the display manager is passed directly over the native socket in volatile memory. The daemon restores the `VolumeKey` and loads collections. Web browsers, Git, and portals access secrets without prompting.
+2. **Lock Screen Dismissal**: When the user unlocks the screen (via `tessera-lock` or equivalent), the PAM stack triggers `pam_sigil.so` during `setcred`/`authenticate`. The `VolumeKey` is re-instantiated in memory before the desktop compositor renders.
+
+### 3. Away-from-Desk Protection (Logind-Bound Zeroization)
+When the user steps away from their workstation:
+- Locking the screen broadcasts `org.freedesktop.login1.Session.Lock`.
+- Switching users or virtual terminals changes the session `Active` property to `false`.
+- `sigil` intercepts these events and immediately triggers cryptographic zeroization (`zeroize::Zeroize`) on the `VolumeKey` and all decrypted in-memory items.
+- **Result**: Physical memory holds zero key material while the machine is locked, neutralizing cold-boot attacks and unauthorized local scripts.
+
+### 4. Password Rotation & Self-Healing
+
+#### A. Standard User Password Change
+When the user updates their password via `passwd` or the desktop settings:
+1. `pam_sigil.so` intercepts `pam_sm_chauthtok`.
+2. It captures `old_authtok` and `new_authtok` and sends `IpcRequest::RotateSlotPassword`.
+3. `sigil` decrypts `slot-0.enc` using the old password, derives a new slot key from the new password, and atomically writes the updated `slot-0.enc` and `slot-0.kdf`.
+4. Bulk data (`vault.data`) remains untouched.
+
+#### B. Administrator Reset & Out-of-Band Self-Healing
+If an administrator changes the user's password (`sudo passwd <user>`), the old password is unknown to PAM:
+1. `pam_sigil.so` flags `desync_detected: true` in `vault.meta`.
+2. On next login, the vault enters `LockState::Desynced`.
+3. When an application requests a secret, `sigil-prompter` displays an integrated recovery dialog:
+   > *"Your system password was changed by an administrator. Please enter your previous password or Emergency Recovery Key to re-synchronize your credentials."*
+4. Providing the previous secret verifies the slot, updates Slot 0 with the current session password, and restores full transparency.
 
 ---
 
-## Unlock Mechanisms
+## Biometric and Passwordless Logins
 
-Regardless of which protection mode you use, `sigil` unlocks the vault automatically — no
-separate prompt is needed. Two mechanisms work together:
+When authentication occurs without an alphanumeric password (e.g. fingerprint via `fprintd` or face unlock via `Howdy`), PAM receives no plaintext authentication token.
 
-### A — PAM (login-time unlock)
+`sigil` resolves this through a graded fallback:
 
-`pam_sigil.so` captures the authentication token during login and transmits it directly over
-the native Unix domain socket (`$XDG_RUNTIME_DIR/sigil/native.sock`) in memory with `SO_PEERCRED`
-kernel authentication. Zero bytes are written to disk or tmpfs.
-
-- **Password mode**: the password is used in-memory to derive the Argon2id vault key, then immediately zeroized.
-- **No-password mode**: the vault unlocks itself via `vault.key` upon daemon startup without PAM interaction.
-
-### B — Screensaver integration (swaylock)
-
-Add `pam_sigil.so` to swaylock's PAM stack so the daemon re-unlocks automatically when the
-screensaver is dismissed.
-
-Lock → vault locks and evicts keys (logind `Session.Lock` signal).
-Unlock → swaylock authenticates via PAM → `pam_sigil.so` connects to native Unix socket in memory → vault re-unlocks.
+| Scenario | Vault Behavior |
+| :--- | :--- |
+| **No TPM2 / Pure Software** | The vault remains `Locked` upon login. The first time an application requests a credential, `sigil-prompter` requests the user's system password once to unlock Slot 0 for the session. |
+| **With TPM2 Enclave (Hardware Bound)** | The `VolumeKey` is sealed to Slot 2 (`slot-2.tpm2`) with a TPM2 policy asserting PCR state and user biometric presence. Fingerprint verification satisfies the hardware policy and unseals the `VolumeKey` directly. |

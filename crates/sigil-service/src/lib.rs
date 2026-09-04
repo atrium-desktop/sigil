@@ -5,7 +5,7 @@ pub use state::{CollectionRecord, SigilService, ItemRecord};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sigil_core::{Namespace, Purpose, Subject};
+    use sigil_domain::{Namespace, Purpose, Subject};
     use sigil_crypto::MasterKey;
     use sigil_store::FileVaultStore;
     use std::collections::HashMap;
@@ -78,6 +78,63 @@ mod tests {
         assert!(service.get_item("login", "item-1").await.is_err());
 
         // Cleanup
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_auto_provision_rotate_and_recover() {
+        let temp_dir = std::env::temp_dir().join(format!("sigil_svc_auto_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let store = FileVaultStore::new(temp_dir.clone());
+        let service = SigilService::new(store.clone());
+
+        assert_eq!(service.lock_state().await, sigil_domain::LockState::Uninitialized);
+
+        // Auto-provision via unlock_with_password
+        service.unlock_with_password("my-initial-pwd").await.unwrap();
+        assert_eq!(service.lock_state().await, sigil_domain::LockState::Unlocked);
+
+        // Store an item and save
+        service
+            .set_item(
+                "login",
+                "vault-secret",
+                "My Secret",
+                HashMap::new(),
+                b"confidential-data",
+                "text/plain",
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Lock
+        service.lock().await.unwrap();
+        assert_eq!(service.lock_state().await, sigil_domain::LockState::Locked);
+
+        // Rotate password
+        service.rotate_password("my-initial-pwd", "my-new-pwd").await.unwrap();
+
+        // Old password fails
+        assert!(service.unlock_with_password("my-initial-pwd").await.is_err());
+
+        // New password unlocks
+        service.unlock_with_password("my-new-pwd").await.unwrap();
+        assert_eq!(service.lock_state().await, sigil_domain::LockState::Unlocked);
+        let item = service.get_item("login", "vault-secret").await.unwrap();
+        assert_eq!(item.secret, b"confidential-data");
+
+        // Simulate desync
+        service.lock().await.unwrap();
+        store.mark_desynced(true).unwrap();
+        assert_eq!(service.lock_state().await, sigil_domain::LockState::Desynced);
+
+        // Recover and sync with new session password
+        service.recover_and_sync("my-new-pwd", "recovered-pwd").await.unwrap();
+        assert_eq!(service.lock_state().await, sigil_domain::LockState::Unlocked);
+        assert!(!store.is_desynced());
+
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

@@ -7,7 +7,7 @@ description = "Async client library for sigil native IPC"
 license.workspace = true
 
 [dependencies]
-sigil-core = { path = "../sigil-core" }
+sigil-domain = { path = "../sigil-domain" }
 sigil-ipc = { path = "../sigil-ipc" }
 tokio = { workspace = true, features = ["net", "io-util", "sync", "time"] }
 thiserror = { workspace = true }

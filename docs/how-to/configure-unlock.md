@@ -1,76 +1,99 @@
-# How to Configure Vault Unlock
+# How to Configure Industrial Zero-Friction Vault Unlock
 
-## Setup
+Under the Envelope Multi-Slot Architecture (ADR-0002), `sigil` achieves zero-friction, transparent credential unlocking using your system login password. You never need to compromise security with unencrypted keyfiles or endure separate password prompts.
 
-### 1. Install the PAM module
+---
+
+## Architecture Setup
+
+### 1. Build & Install the PAM Module
 
 ```bash
 cargo build --release -p sigil-pam
-sudo cp target/release/libpam_sigil.so /lib/security/pam_sigil.so
+# Install to system PAM security module path
+sudo install -m 0755 target/release/libpam_sigil.so /usr/lib/security/pam_sigil.so
 ```
 
-### 2. Add to login PAM stack
+### 2. Configure Systemd User Socket Activation
 
-| Distribution | File |
-|---|---|
-| Arch Linux | `/etc/pam.d/system-login` |
-| Debian / Ubuntu | `/etc/pam.d/common-auth` |
-| Fedora | `/etc/pam.d/login` |
+Socket activation guarantees the native IPC socket is available before PAM executes, eliminating chicken-and-egg startup races.
 
+Create `/usr/lib/systemd/user/sigil.socket`:
+
+```ini
+[Unit]
+Description=Sigil Credential Service Native Activation Socket
+Before=sockets.target
+
+[Socket]
+ListenStream=%t/sigil/native.sock
+SocketMode=0600
+DirectoryMode=0700
+
+[Install]
+WantedBy=sockets.target
 ```
-auth optional pam_sigil.so
-```
 
-### 3. Add to swaylock PAM stack
-
-```
-# /etc/pam.d/swaylock
-auth optional pam_sigil.so
-```
-
-### 4. Switch to no-password mode (if using FDE)
-
+Enable the socket across user sessions:
 ```bash
-systemctl --user stop sigil.service
-sigil-cli clear-password   # prompts for current vault password
-systemctl --user start sigil.service
-```
-
-To revert to password mode:
-
-```bash
-systemctl --user stop sigil.service
-sigil-cli set-password     # prompts for new password (confirmed)
-systemctl --user start sigil.service
+systemctl --user enable sigil.socket
 ```
 
 ---
 
-## Password Management
+## PAM Stack Integration
 
-```bash
-# Change vault password (password mode only)
-# Stop the daemon first to avoid vault file conflicts.
-systemctl --user stop sigil.service
-sigil-cli change-password  # prompts for old password, then new password (confirmed)
-systemctl --user start sigil.service
+To enable transparent first-login provisioning, screen unlock, and password change cascade synchronization, add `pam_sigil.so` to your PAM stacks.
 
-# Wipe all secrets and start over (irreversible)
-sigil-cli reset
-sigil-cli reset --force   # skip confirmation prompt
+### 1. Login Stack (`/etc/pam.d/system-login` or `/etc/pam.d/login`)
+
+```pam
+# 1. Standard authentication
+auth       sufficient   pam_unix.so try_first_pass nullok
+auth       required     pam_deny.so
+
+# 2. Account verification
+account    required     pam_unix.so
+
+# 3. Password changes (synchronizes Slot 0)
+password   sufficient   pam_unix.so sha512 shadow try_first_pass use_authtok
+password   optional     pam_sigil.so
+
+# 4. Session management (must be after pam_systemd creates /run/user/<uid>)
+session    required     pam_systemd.so
+session    optional     pam_sigil.so
 ```
+
+### 2. Screen Locker Stack (`/etc/pam.d/tessera-lock`, `/etc/pam.d/swaylock`, or `/etc/pam.d/hyprlock`)
+
+```pam
+#%PAM-1.0
+auth       sufficient   pam_unix.so try_first_pass
+auth       optional     pam_sigil.so
+account    include      system-login
+session    optional     pam_sigil.so
+```
+
+When you unlock your screen, PAM transmits the verified password over `/run/user/<uid>/sigil/native.sock` in memory. `sigil` unwraps the `VolumeKey` and restores unlocked operation before the compositor unlocks the display.
 
 ---
 
-## Headless / IoT Deployments
+## Multi-User & System Account Protections
 
-Neither mode above applies to headless systems (no display, no PAM login session). Set the
-vault password via environment variable:
+`pam_sigil.so` enforces industrial isolation:
+- **System Accounts Bypassed**: Accounts with `UID < 1000` or `UID == 65534` (e.g. `systemd-coredump`, `cron`, `nobody`) are skipped immediately without socket access.
+- **Kernel UID Equality**: Every IPC connection is verified via `SO_PEERCRED`. Cross-user access is impossible.
+- **Session Eviction**: When a user switches seats or locks the workstation, `sigil` intercepts logind's `Lock` and `Active=false` properties and immediately zeroes out `VolumeKey` and all cached decrypted secrets in RAM.
+
+---
+
+## Headless / Container Deployments
+
+For automated CI, containers, or headless IoT systems where no PAM or graphical seat exists, supply the vault password via environment variable:
 
 ```ini
 # ~/.config/systemd/user/sigil.service [Service]
-Environment="SIGIL_PASSWORD=your_device_password"
+Environment="SIGIL_PASSWORD=your_device_provisioning_key"
 ```
 
-The daemon detects the absence of `WAYLAND_DISPLAY` and `DISPLAY`, waits up to 30 seconds
-for a display to appear, and falls back to this variable if none is found.
+The daemon detects the environment variable, provisions or unlocks Slot 0 automatically, and securely zeroes the environment buffer in memory.

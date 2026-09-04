@@ -1,4 +1,4 @@
-use sigil_core::{SigilError, Result};
+use sigil_domain::{Result, SigilError};
 use std::os::unix::io::AsRawFd;
 use tokio::net::UnixStream;
 

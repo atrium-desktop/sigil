@@ -2,7 +2,7 @@ use directories::ProjectDirs;
 use sigil_ipc::NativeIpcServer;
 use sigil_secret_service::{Collection, Prompt, SecretServiceDbus};
 use sigil_service::SigilService;
-use sigil_store::{ensure_secure_dir, FileVaultStore, StoredVaultData};
+use sigil_store::{ensure_secure_dir, FileVaultStore};
 use std::error::Error;
 use std::path::PathBuf;
 use tracing::{error, info, warn};
@@ -25,6 +25,10 @@ fn apply_process_hardening() {
         };
         if libc::setrlimit(libc::RLIMIT_CORE, &rlim) != 0 {
             warn!("Failed to set RLIMIT_CORE to 0");
+        }
+        // Opportunistically lock process memory pages to prevent swapping secrets to disk
+        if libc::mlockall(libc::MCL_CURRENT | libc::MCL_FUTURE) != 0 {
+            tracing::debug!("mlockall failed (likely unprivileged memory limit); continuing with standard protection");
         }
     }
 }
@@ -62,47 +66,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Check for explicit headless password configuration
     if let Ok(mut pwd) = std::env::var("SIGIL_PASSWORD") {
         if !pwd.is_empty() {
-            if !store.exists() {
-                info!("Initializing password vault from SIGIL_PASSWORD.");
-                let salt = sigil_crypto::generate_salt(sigil_crypto::DEFAULT_SALT_LEN);
-                let params = sigil_crypto::KdfParams::default();
-                match sigil_crypto::derive_key_argon2id(pwd.as_bytes(), &salt, &params) {
-                    Ok(key) => {
-                        let salt_hex: String = salt.iter().map(|b| format!("{:02x}", b)).collect();
-                        let _ = sigil_store::atomic_replace(&store.salt_path(), salt_hex.as_bytes());
-                        let _ = store.save(&key, &StoredVaultData::default());
-                        let _ = service.unlock_with_master_key(key).await;
-                        info!("Vault initialized and unlocked from SIGIL_PASSWORD.");
-                    }
-                    Err(e) => error!("Failed to derive key from SIGIL_PASSWORD: {}", e),
-                }
-            } else {
-                match service.unlock_with_password(&pwd).await {
-                    Ok(_) => info!("Vault unlocked from SIGIL_PASSWORD."),
-                    Err(e) => error!("Failed to unlock vault with SIGIL_PASSWORD: {}", e),
-                }
+            match service.unlock_with_password(&pwd).await {
+                Ok(_) => info!("Vault initialized/unlocked from SIGIL_PASSWORD."),
+                Err(e) => error!("Failed to initialize/unlock vault with SIGIL_PASSWORD: {}", e),
             }
             pwd.zeroize();
         }
     }
 
-    // Auto-unlock with keyfile if in keyfile mode and still locked
     if service.is_locked().await {
         if store.exists() {
-            if store.is_keyfile_mode() {
-                match store.read_keyfile() {
-                    Ok(key) => match service.unlock_with_master_key(key).await {
-                        Ok(_) => info!("Vault unlocked using keyfile."),
-                        Err(e) => error!("Failed to unlock vault with keyfile: {}", e),
-                    },
-                    Err(e) => error!("Failed to read keyfile: {}", e),
-                }
+            if store.is_desynced() {
+                warn!("Vault credentials are desynchronized. Awaiting self-healing recovery via prompter.");
             } else {
-                info!("Password-mode vault detected. Awaiting unlock via PAM or IPC.");
+                info!("Vault sealed. Awaiting transparent unlock via PAM or native IPC.");
             }
         } else {
             info!(
-                "No vault found at {}. Awaiting initialization with password.",
+                "No vault found at {}. Awaiting zero-touch auto-provisioning via PAM on first login.",
                 data_dir.display()
             );
         }

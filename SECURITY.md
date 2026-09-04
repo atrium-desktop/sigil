@@ -1,109 +1,60 @@
-# Security Model
+# Security Model & Formal Posture
 
-## Threat Model
+`sigil` is a security-critical desktop credential infrastructure daemon implementing the Freedesktop Secret Service standard and XDG Desktop Portal Secret backend.
 
-| Threat | Mitigation |
-|--------|-----------|
-| Offline brute-force of `vault.enc` (password mode) | Argon2id KDF; AEAD authentication tag rejects modified ciphertext |
-| Offline decryption of `vault.enc` (no-password mode) | No protection without FDE — `vault.key` is on the same disk. Requires full-disk encryption (LUKS) at the OS layer. |
-| Secret exfiltration via D-Bus while unlocked | Session secrets are AES-128-CBC encrypted in transit; plaintext never leaves the daemon |
-| Session key recovery from process memory | AES session keys are stored in `Vec<u8>` with a custom `Drop` that calls `zeroize()` |
-| Concurrent unlock spawning multiple prompts | `is_unlocking` flag checked and set atomically under a single write lock |
-| Malformed DH public key (small-subgroup attack) | Client public key validated: `1 < key < p−1` per RFC 2409 before any computation |
-| PAM credential transit | Credentials transmitted directly over native Unix socket in memory with `SO_PEERCRED`; zeroized immediately; zero disk footprint |
-| Prompter process hijacking | Socket path is inside `$XDG_RUNTIME_DIR` (mode 0700, owned by user) |
-| Secret access after screen lock | logind `Session.Lock` signal evicts the vault key (`vault = None`); subsequent D-Bus requests trigger re-unlock |
+---
 
-**Outside scope**: `sigil` trusts the D-Bus session bus. Any process that can connect to the
-user's session bus and call `Unlock` can trigger an unlock attempt (password prompt or
-keyfile read). This is an inherent property of the Secret Service API — the same limitation
-applies to gnome-keyring and KWallet.
+## 1. Threat Model & Mitigations
 
-## Cryptography
+| Threat Vector | Mitigation Strategy | Security Invariant |
+|---|---|---|
+| **Stolen Drive / Offline Filesystem Extraction** | Vault bulk data (`vault.data`) encrypted with 256-bit `VolumeKey` via XChaCha20-Poly1305. The `VolumeKey` is sealed in `slot-0.enc` with Argon2id (64 MiB RAM, 3 iterations, 4 lanes). | Computationally intractable brute force; zero plaintext keys stored on disk. |
+| **Tampering / Bit-Flipping Attacks** | Poly1305 AEAD authentication tags on both slots and bulk ciphertext. | Any byte modification triggers hard cryptographic authentication failure. |
+| **Away-from-Desk / Cold-Boot Memory Inspection** | Logind dual-trigger listener: `Session.Lock` and `Active=false` immediately zeroize the `VolumeKey` and wipe in-memory secret caches. | Keys eradicated from physical RAM during screen lock, seat change, or sleep. |
+| **Process Snooping & Core Dump Theft** | Process hardening on startup: `PR_SET_DUMPABLE = 0`, `RLIMIT_CORE = 0`, and opportunistic `mlockall(MCL_CURRENT \| MCL_FUTURE)`. | Non-root processes cannot read `/proc/$PID/mem` or trigger core dumps. |
+| **Multi-User / Local Cross-Tenant Snooping** | Runtime socket restricted to `/run/user/<uid>/sigil/native.sock` (`0600` on `0700` parent). Kernel `SO_PEERCRED` strictly enforced. | Cross-user IPC attempts rejected immediately by kernel credentials. |
+| **System Daemon Credential Interception** | `pam_sigil.so` enforces a strict system account boundary (`UID < 1000` and `UID == 65534` bypassed). | System background processes generate zero credential transit. |
+| **Secret Exfiltration Over Session D-Bus Wire** | Mandatory Diffie-Hellman session key exchange (`dh-ietf1024-sha256-aes128-cbc-pkcs7`). Plaintext secrets never cross the wire unencrypted. | Snooping the session bus yields only ciphertext. |
+| **Cross-Sandbox Flatpak/Snap Leakage** | Portal requests routed through `xdg-desktop-portal-atrium`. Application keys derived via HKDF-SHA256 keyed to `(namespace, app_id, purpose)`. | Applications receive mathematically orthogonal secrets. |
+| **Password Change Desynchronization** | `pam_sm_chauthtok` captures password change events and re-encrypts Slot 0. Administrator resets trigger `LockState::Desynced` self-healing. | Zero password lockouts, zero lost credentials. |
 
-### Vault at Rest
+---
 
-| Layer | Algorithm | Parameters | Crate |
-|-------|-----------|------------|-------|
-| Key derivation (password mode) | Argon2id | Default (19 MiB memory, 2 iterations, 1 thread) | `argon2` |
-| Key (no-password mode) | OS-random 256-bit | Generated once via `OsRng`, stored in `vault.key` (mode 0600) | `rand` |
-| Vault encryption | XChaCha20-Poly1305 | 192-bit random nonce per save | `chacha20poly1305` |
-| Salt storage (password mode) | Base64-encoded `SaltString` | OS-random via `OsRng` | `argon2` / `rand` |
+## 2. Cryptographic Specifications
 
-**Vault file format**: `[24-byte nonce][ciphertext+16-byte Poly1305 tag]`
+### Envelope Vault at Rest (Format v2)
 
-The Poly1305 authentication tag ensures any single-bit corruption or tampering of `vault.enc`
-produces a decryption failure, not silent data corruption.
+```text
+~/.local/share/sigil/
+├── vault.meta              # Manifest and status flags (mode 0600)
+├── vault.data              # Bulk payload encrypted by 256-bit VolumeKey (mode 0600)
+└── vault.slots/            # Independent authentication key slots (mode 0700)
+    ├── slot-0.kdf          # Slot 0: Argon2id KDF parameters and salt
+    └── slot-0.enc          # Slot 0: Wrapped 256-bit VolumeKey
+```
 
-### Secret Service Session (In-Transit)
+| Component | Cryptographic Primitive | Parameters | Source |
+|---|---|---|---|
+| **VolumeKey** | Symmetric CSPRNG | 256 bits (32 bytes) | `rand::rngs::OsRng` / `getrandom` |
+| **Slot 0 Wrapping** | XChaCha20-Poly1305 | 192-bit nonce, 128-bit Poly1305 tag | `chacha20poly1305` |
+| **Key Derivation (Slot 0)** | Argon2id | 64 MiB RAM, 3 iterations, 4 lanes, 32-byte salt | `argon2` |
+| **Bulk Data Encryption** | XChaCha20-Poly1305 | 192-bit nonce per atomic save | `chacha20poly1305` |
+| **Portal Secret Derivation** | HKDF-SHA256 | Domain-separated `(namespace, subject, purpose)` | `hkdf` / `sha2` |
 
-The `dh-ietf1024-sha256-aes128-cbc-pkcs7` session algorithm mandated by the Secret Service spec:
+---
 
-| Step | Detail |
-|------|--------|
-| DH group | RFC 2409 IETF 1024-bit MODP Group 2 (1024-bit prime `P`, generator `g=2`) |
-| Server private key | Random integer in `[2, P−2]` via `rand::thread_rng().gen_biguint_range(...)` |
-| Shared secret | `client_pub ^ server_priv mod P`, padded with leading zeros to 128 bytes |
-| Key derivation | `HKDF-SHA256(IKM=shared_128, salt=None, info=∅)`, first 16 bytes |
-| Encryption | AES-128-CBC with PKCS#7 padding; 16-byte IV generated with `OsRng` |
+## 3. Memory Safety & Lifetime Guarantees
 
-**HKDF, not SHA256**: The spec text says "hashing with SHA-256" but the reference implementation
-(libsecret, secretstorage) applies RFC 5869 HKDF. `HKDF(IKM, salt=None)` uses a 32-byte
-all-zero salt. Using plain `SHA256(shared)` produces a different key and breaks interoperability.
+All sensitive memory containers (`MasterKey`, `SecretBytes`, `ItemRecord`, temporary password buffers) implement `zeroize::Zeroize` and `zeroize::ZeroizeOnDrop`.
 
-### Memory Safety
+1. **Deterministic Eviction**: Memory buffers holding plaintext authentication tokens in `pam_sigil` and `sigil` are wiped immediately after the cryptographic operation completes.
+2. **Anti-Paging (`mlockall`)**: The daemon attempts to lock all mapped memory pages into physical RAM using `libc::mlockall(MCL_CURRENT | MCL_FUTURE)` to prevent sensitive secrets from being swapped to disk.
+3. **Redacted Debug Formatting**: `SecretBytes` and `MasterKey` redact their raw byte contents in standard `Debug` and `Display` implementations.
 
-All sensitive in-memory structures zeroize their contents on drop:
+---
 
-| Type | Sensitive fields | Mechanism |
-|------|-----------------|-----------|
-| `VaultData` / `CollectionData` / `ItemData` | `secret: Vec<u8>` | `#[derive(Zeroize)] #[zeroize(drop)]` |
-| `SessionAlgorithm::Dh(Vec<u8>)` | AES-128 session key | Manual `Drop` impl calling `zeroize()` |
-| Decrypt buffer in `session.rs` | Plaintext + padded ciphertext | `buf.zeroize()` before `Ok`/`Err` return |
+## 4. Trust Boundaries & Non-Claims
 
-Decrypted vault data is held in `Arc<RwLock<Vec<u8>>>` within each `Item`. The data lives only
-for the daemon's lifetime; there is no swap/page-out mitigation (`mlock`) at present (see Known
-Limitations).
-
-## Known Limitations
-
-### `mlock` not applied to secret memory
-Decrypted secrets in `Item.secret` can in principle be swapped to disk by the OS if memory
-pressure is high. Mitigating this requires `libc::mlock` on the `Vec<u8>` allocations, which
-needs careful integration with the allocator. This is a known future improvement.
-
-### 1024-bit DH is legacy
-The Secret Service spec mandates the 1024-bit MODP group. While considered weak by current
-NIST guidance, no client library supports a stronger group for this protocol. The session
-key only protects the D-Bus wire transport (loopback), not the vault at rest. The vault uses
-XChaCha20-Poly1305 with a 256-bit key, which is not affected.
-
-### PAM credential transit is memory-only
-`sigil-pam` connects directly to the daemon's native Unix domain socket (`$XDG_RUNTIME_DIR/sigil/native.sock`)
-using in-memory length-delimited framing. Passwords are never written to disk or tmpfs files. The daemon
-verifies peer credentials via `SO_PEERCRED` and both PAM and daemon zeroize authentication buffers immediately
-after key derivation.
-
-### `vault.key` is plaintext on disk (no-password mode)
-In no-password mode the vault key is stored unencrypted in `vault.key` (mode 0600). Anyone
-with read access to the file can decrypt the vault. This mode is only appropriate when
-full-disk encryption (e.g. LUKS) provides the outer protection layer.
-
-### `Service.Lock()` evicts secrets and locks vault
-`Service.Lock()` triggers vault locking, dropping the master key and securely zeroizing all in-memory
-decrypted item secrets across collections. Screen locking via logind `Session.Lock` signal triggers
-the same immediate eviction pipeline.
-
-### Portal (`org.freedesktop.portal.Secret`) Per-App Secret Derivation
-The `xdg-desktop-portal` integration implements `org.freedesktop.impl.portal.Secret`. It derives a 256-bit per-application secret using `HKDF-SHA256(salt="org.freedesktop.portal.Secret", IKM=master_key, info=app_id)` and writes it to the provided file descriptor, zeroizing in-memory secrets after transmission.
-
-## D-Bus Threat Surface
-
-Any local user process on the same session bus can:
-- Call `OpenSession` to establish an encrypted channel
-- Call `Unlock` to trigger an unlock attempt (prompter in password mode; automatic keyfile
-  read in no-password mode — no user interaction required)
-- Enumerate collection/item paths once unlocked
-
-There is no per-application secret namespacing in the Secret Service API. If an application
-needs isolation, it should request a dedicated collection via `CreateCollection`.
+1. **Root / Kernel Compromise**: An attacker with root capabilities or kernel exploit access can inspect arbitrary user-space process memory while the vault is actively unlocked.
+2. **Compromised Wayland Compositor / Display Manager**: An attacker controlling the Wayland compositor process can inspect graphical input events before they reach PAM or the prompt agent.
+3. **Active Hardware Bus Interposer**: Attacking active DDR bus lines with physical hardware while the user is actively working and the machine is unlocked is outside user-space software guarantees.

@@ -203,4 +203,5 @@ pub enum LockState {
     Uninitialized,
     Locked,
     Unlocked,
+    Desynced,
 }

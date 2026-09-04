@@ -64,20 +64,16 @@ mod tests {
 
         // Setup password vault and unlock with password via client
         let pwd = "super-secret-passphrase";
-        let salt = sigil_crypto::generate_salt(32);
-        let params = sigil_crypto::KdfParams {
-            m_cost: 1024,
-            t_cost: 1,
-            p_cost: 1,
-            version: 0x13,
-        };
-        let pkey = sigil_crypto::derive_key_argon2id(pwd.as_bytes(), &salt, &params).unwrap();
-        store.save(&pkey, &sigil_store::StoredVaultData::default()).unwrap();
-        let salt_hex: String = salt.iter().map(|b| format!("{:02x}", b)).collect();
-        let kdf_bytes = sigil_crypto::encode_kdf(&params, &salt_hex).unwrap();
-        std::fs::write(store.kdf_path(), kdf_bytes).unwrap();
+        store.initialize_with_password(pwd).unwrap();
 
         client.unlock_with_password(pwd).await.unwrap();
+        assert!(!client.is_locked().await.unwrap());
+
+        // Test rotate password via client
+        client.rotate_password(pwd, "rotated-passphrase").await.unwrap();
+        client.lock().await.unwrap();
+        assert!(client.unlock_with_password(pwd).await.is_err());
+        client.unlock_with_password("rotated-passphrase").await.unwrap();
         assert!(!client.is_locked().await.unwrap());
 
         let _ = std::fs::remove_dir_all(&temp_dir);

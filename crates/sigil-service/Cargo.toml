@@ -7,7 +7,7 @@ description = "Core credential service, state machine, and domain business logic
 license.workspace = true
 
 [dependencies]
-sigil-core = { path = "../sigil-core" }
+sigil-domain = { path = "../sigil-domain" }
 sigil-crypto = { path = "../sigil-crypto" }
 sigil-store = { path = "../sigil-store" }
 tokio = { workspace = true, features = ["sync", "time"] }

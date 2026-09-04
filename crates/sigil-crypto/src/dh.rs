@@ -1,5 +1,5 @@
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
-use sigil_core::{SigilError, Result, SecretBytes};
+use sigil_domain::{Result, SecretBytes, SigilError};
 use hkdf::Hkdf;
 use num_bigint::{BigUint, RandBigInt};
 use rand::rngs::OsRng;

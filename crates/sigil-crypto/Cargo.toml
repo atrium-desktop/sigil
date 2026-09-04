@@ -7,7 +7,7 @@ description = "Cryptographic primitives and key derivation for sigil"
 license.workspace = true
 
 [dependencies]
-sigil-core = { path = "../sigil-core" }
+sigil-domain = { path = "../sigil-domain" }
 chacha20poly1305 = { workspace = true }
 argon2 = { workspace = true }
 hkdf = { workspace = true }

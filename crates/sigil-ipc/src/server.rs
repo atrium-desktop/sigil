@@ -1,7 +1,7 @@
 use crate::frame::{read_request, write_response};
 use crate::peer::check_peer_credentials;
 use crate::protocol::{IpcRequest, IpcResponse};
-use sigil_core::{SigilError, Namespace, Purpose, Result, Subject};
+use sigil_domain::{Namespace, Purpose, Result, SigilError, Subject};
 use sigil_service::SigilService;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -89,6 +89,35 @@ async fn handle_connection(mut stream: UnixStream, service: SigilService) -> Res
             IpcRequest::UnlockWithPassword { mut password } => {
                 let res = service.unlock_with_password(&password).await;
                 password.zeroize();
+                match res {
+                    Ok(_) => IpcResponse::Success,
+                    Err(SigilError::AuthenticationRequired(ref msg)) if msg.contains("desynchronized") => {
+                        IpcResponse::Desynced
+                    }
+                    Err(e) => IpcResponse::Error(e.to_string()),
+                }
+            }
+            IpcRequest::RotateSlotPassword {
+                mut old_password,
+                mut new_password,
+            } => {
+                let res = service.rotate_password(&old_password, &new_password).await;
+                old_password.zeroize();
+                new_password.zeroize();
+                match res {
+                    Ok(_) => IpcResponse::Success,
+                    Err(e) => IpcResponse::Error(e.to_string()),
+                }
+            }
+            IpcRequest::RecoverAndSyncWithCurrentPassword {
+                mut recovery_secret,
+                mut new_system_password,
+            } => {
+                let res = service
+                    .recover_and_sync(&recovery_secret, &new_system_password)
+                    .await;
+                recovery_secret.zeroize();
+                new_system_password.zeroize();
                 match res {
                     Ok(_) => IpcResponse::Success,
                     Err(e) => IpcResponse::Error(e.to_string()),

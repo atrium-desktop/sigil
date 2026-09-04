@@ -1,113 +1,91 @@
 # Vault Lifecycle & Key Management Guide
 
-This guide covers complete operational procedures for managing `sigil` vaults throughout their lifecycle: initialization, re-keying, mode migration, backup, and disaster recovery.
+This guide covers operational procedures for managing `sigil` vaults throughout their lifecycle: zero-touch provisioning, envelope key slot management, password synchronization, backup, and emergency disaster recovery.
 
 ---
 
-## 1. Vault Storage Structure
+## 1. Vault Architecture Overview
 
-By default, `sigil` stores vault data in `$XDG_DATA_HOME/sigil` (typically `~/.local/share/sigil`):
+Under the Envelope Multi-Slot Architecture (ADR-0002), all vault data resides in `$XDG_DATA_HOME/sigil` (typically `~/.local/share/sigil`):
 
 ```text
 ~/.local/share/sigil/
-├── vault.enc   # XChaCha20-Poly1305 encrypted JSON payload (mode 0600)
-├── vault.salt  # 32-byte cryptographic random salt (mode 0600)
-└── vault.kdf   # Argon2id parameters (m_cost, t_cost, p_cost)
+├── vault.meta              # Manifest, active slots, and desync indicators (mode 0600)
+├── vault.data              # Bulk payload encrypted by 256-bit VolumeKey (mode 0600)
+└── vault.slots/            # Authentication key slots (mode 0700)
+    ├── slot-0.kdf          # Slot 0 (Login password) Argon2id parameters
+    ├── slot-0.enc          # Slot 0 wrapped VolumeKey ciphertext
+    ├── slot-1.kdf          # Slot 1 (Emergency Recovery Key) KDF parameters
+    └── slot-1.enc          # Slot 1 wrapped VolumeKey ciphertext
 ```
 
-In keyfile mode, `vault.key` (32-byte raw key in hex) replaces `vault.salt` and `vault.kdf`.
+Raw unencrypted keyfiles (`vault.key`) are deprecated and disallowed in desktop profiles to guarantee defense in depth.
 
 ---
 
-## 2. Vault Initialization
+## 2. Vault Provisioning
 
-### Password Mode (Default / Recommended)
-```bash
-# Initialize vault with an interactive master password
-sigil-cli init
-```
-This prompts for a new password, generates a fresh 32-byte salt, writes `vault.salt` and `vault.kdf`, and creates an empty encrypted `vault.enc`.
+### Zero-Touch Desktop Provisioning (Standard)
+In a standard desktop environment, **no manual CLI initialization is required**:
+1. When you first log into your user account, `pam_sigil.so` contacts the socket-activated daemon over the native IPC socket in memory.
+2. The daemon automatically generates a cryptographically secure 256-bit `VolumeKey`, derives a slot key from your login password, seals the key into `vault.slots/slot-0.enc`, and creates an empty `vault.data`.
+3. Your vault is immediately unlocked and ready.
 
-### Keyfile Mode (For Full-Disk Encryption)
-```bash
-# Initialize vault without a password (uses random 256-bit vault.key)
-sigil-cli init --no-password
+### Headless / Container Provisioning
+For headless server environments where PAM is not configured, provision or unlock the vault by injecting `SIGIL_PASSWORD` via systemd:
+```ini
+# ~/.config/systemd/user/sigil.service [Service]
+Environment="SIGIL_PASSWORD=your_device_passphrase"
 ```
+The daemon provisions Slot 0 on startup and immediately wipes the password from memory.
 
 ---
 
-## 3. Changing Vault Passwords
+## 3. Emergency Recovery and Disaster Preparedness
 
-To prevent data corruption or half-written states, `sigil-cli` implements a two-phase staged re-keying protocol:
-
-```bash
-# Step 1: Stop the background service to avoid concurrent file modifications
-systemctl --user stop sigil.service
-
-# Step 2: Run change-password
-sigil-cli change-password
-# Prompts for current password, then new password (with confirmation)
-
-# Step 3: Restart the background service
-systemctl --user start sigil.service
-```
-
-The tool writes `.next` staged files, synchronizes buffers with `fsync`, and atomically replaces `vault.enc` and `vault.salt`.
+Under the envelope multi-slot model, you can maintain backup resilience in two complementary ways:
+1. **Encrypted Archive Backup**: Safely backup `~/.local/share/sigil/`. Because all bulk data is encrypted by the `VolumeKey` and the `VolumeKey` is sealed with Argon2id, the archive is safe for off-site cold storage.
+2. **Self-Healing Recovery**: If an administrator changes your system password without your old password, `sigil-prompter` will prompt you for your previous password on next secret access and automatically re-seal Slot 0 with your current session password.
 
 ---
 
-## 4. Switching Vault Modes
+## 4. Changing Passwords and Synchronization
 
-### From Password Mode to Keyfile Mode
-```bash
-systemctl --user stop sigil.service
-sigil-cli clear-password
-systemctl --user start sigil.service
-```
+### Automatic Desktop Synchronization
+When you change your user password using `passwd` in a terminal or through the desktop control center:
+1. `pam_sigil.so` hooks into the PAM `password` stack (`pam_sm_chauthtok`).
+2. It captures the old and new passwords and instructs `sigil` to re-encrypt `slot-0.enc`.
+3. Bulk credential data (`vault.data`) is never modified or rewritten. The operation completes in milliseconds.
 
-### From Keyfile Mode to Password Mode
-```bash
-systemctl --user stop sigil.service
-sigil-cli set-password
-systemctl --user start sigil.service
-```
+### Self-Healing After Admin Password Reset
+If a system administrator forces a password change via `sudo passwd <user>` without your old password:
+1. On next login, `sigil` detects that the system password cannot unlock Slot 0, setting the vault to `LockState::Desynced`.
+2. The first time a browser or application requests a secret, `sigil-prompter` displays the self-healing dialog:
+   > *"Your system password was reset. Please enter your previous password or Emergency Recovery Key to re-synchronize."*
+3. Enter your previous password or Slot 1 Recovery Key.
+4. `sigil` unwraps the `VolumeKey`, re-encrypts Slot 0 with your new session password, and clears the desynchronization state.
 
 ---
 
 ## 5. Backup & Disaster Recovery
 
 ### Safe Backup
-To create a complete, consistent backup of your encrypted vault:
+Because `vault.data` and all slots in `vault.slots/` are strongly encrypted with 256-bit keys and Argon2id, you can safely archive the entire vault directory:
 
 ```bash
-# Vault files are fully self-contained encrypted archives
+# Create a consistent, encrypted backup
 tar -czvf sigil-vault-backup-$(date +%F).tar.gz -C ~/.local/share/sigil .
 ```
 
-*Security note*: In password mode, `sigil-vault-backup-*.tar.gz` can be safely archived or synced off-site: it cannot be decrypted without your Argon2id passphrase.
+This backup is safe for remote or cloud storage; without the Slot 0 password or Slot 1 recovery key, the archive cannot be decrypted.
 
 ### Restoring from Backup
 ```bash
-systemctl --user stop sigil.service
+systemctl --user stop sigil.service sigil.socket
 mkdir -p ~/.local/share/sigil
 tar -xzvf sigil-vault-backup-YYYY-MM-DD.tar.gz -C ~/.local/share/sigil
-chmod 700 ~/.local/share/sigil
-chmod 600 ~/.local/share/sigil/*
-systemctl --user start sigil.service
+chmod 700 ~/.local/share/sigil ~/.local/share/sigil/vault.slots
+chmod 600 ~/.local/share/sigil/* ~/.local/share/sigil/vault.slots/*
+systemctl --user start sigil.socket
 ```
-
----
-
-## 6. Emergency Reset
-
-If you have forgotten your password or wish to wipe all credentials:
-
-```bash
-systemctl --user stop sigil.service
-sigil-cli reset
-# Prompts for explicit confirmation before erasing files permanently
-```
-To bypass interactive confirmation in automated environments:
-```bash
-sigil-cli reset --force
-```
+On your next login or screen unlock, PAM will immediately resume transparent unlocking.

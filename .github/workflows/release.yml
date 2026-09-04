@@ -45,7 +45,6 @@ jobs:
           mkdir -p "${DIST}/bin" "${DIST}/lib" "${DIST}/systemd/user" "${DIST}/systemd/portals" "${DIST}/dbus"
           cp target/release/sigil "${DIST}/bin/"
           cp target/release/sigil-prompter "${DIST}/bin/"
-          cp target/release/sigil-cli "${DIST}/bin/"
           cp target/release/libpam_sigil.so "${DIST}/lib/"
           cp systemd/user/* "${DIST}/systemd/user/" 2>/dev/null || true
           cp systemd/portals/* "${DIST}/systemd/portals/" 2>/dev/null || true

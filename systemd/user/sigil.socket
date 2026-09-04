@@ -1,0 +1,12 @@
+[Unit]
+Description=Sigil Credential Service Native Activation Socket
+Documentation=https://github.com/atrium-os/sigil
+Before=sockets.target
+
+[Socket]
+ListenStream=%t/sigil/native.sock
+SocketMode=0600
+DirectoryMode=0700
+
+[Install]
+WantedBy=sockets.target

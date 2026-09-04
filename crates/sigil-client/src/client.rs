@@ -1,5 +1,5 @@
 use crate::error::{ClientError, Result};
-use sigil_core::{LockState, SecretBytes};
+use sigil_domain::{LockState, SecretBytes};
 use sigil_ipc::{read_response, write_request, IpcRequest, IpcResponse};
 use std::path::{Path, PathBuf};
 use tokio::net::UnixStream;
@@ -111,6 +111,49 @@ impl SigilClient {
             &mut stream,
             &IpcRequest::UnlockWithPassword {
                 password: password.to_string(),
+            },
+        )
+        .await?;
+        match read_response(&mut stream).await? {
+            IpcResponse::Success => Ok(()),
+            IpcResponse::Desynced => Err(ClientError::Desynced),
+            IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
+            IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
+            other => Err(ClientError::DaemonError(format!("Unexpected response: {:?}", other))),
+        }
+    }
+
+    /// Rotates the primary password slot (Slot 0) during password change.
+    pub async fn rotate_password(&self, old_password: &str, new_password: &str) -> Result<()> {
+        let mut stream = self.open_stream().await?;
+        write_request(
+            &mut stream,
+            &IpcRequest::RotateSlotPassword {
+                old_password: old_password.to_string(),
+                new_password: new_password.to_string(),
+            },
+        )
+        .await?;
+        match read_response(&mut stream).await? {
+            IpcResponse::Success => Ok(()),
+            IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
+            IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
+            other => Err(ClientError::DaemonError(format!("Unexpected response: {:?}", other))),
+        }
+    }
+
+    /// Recovers and re-synchronizes the vault using a recovery secret and the current session password.
+    pub async fn recover_and_sync(
+        &self,
+        recovery_secret: &str,
+        new_system_password: &str,
+    ) -> Result<()> {
+        let mut stream = self.open_stream().await?;
+        write_request(
+            &mut stream,
+            &IpcRequest::RecoverAndSyncWithCurrentPassword {
+                recovery_secret: recovery_secret.to_string(),
+                new_system_password: new_system_password.to_string(),
             },
         )
         .await?;

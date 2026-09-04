@@ -23,7 +23,7 @@ docs/
 - **[Architecture Overview](explanation/architecture.md)**: System decomposition, crate boundaries, and design principles.
 - **[Threat Model](explanation/threat-model.md)**: Trust boundaries, security claims, and non-claims.
 - **[Freedesktop Specifications](explanation/freedesktop-spec.md)**: Secret Service API and Portal Secret integration.
-- **[Unlock Strategies](explanation/unlock-strategies.md)**: Keyfile, PAM automatic unlock, and UI prompting.
+- **[Unlock Strategies](explanation/unlock-strategies.md)**: Envelope key slots, transparent PAM pass-through, and session zeroization.
 
 ---
 
@@ -32,7 +32,7 @@ docs/
 #### Packaging & Desktop Operations
 - **[Packaging Guide](how-to/packaging-guide.md)**: Distro packaging recipes for Arch Linux (`PKGBUILD`), Fedora (`.spec`), Debian/Ubuntu (`debian/`), and NixOS.
 - **[Desktop Environment & Compositor Setup](how-to/desktop-setup.md)**: Autostart, session management, and screensaver integration (Hyprland, Sway, Wayland).
-- **[Configure Unlock Strategies](how-to/configure-unlock.md)**: Setting up PAM automatic unlock, keyfile mode, and GUI prompts.
+- **[Configure Unlock Strategies](how-to/configure-unlock.md)**: Setting up transparent PAM unlock, systemd socket activation, and screen locker integration.
 - **[Troubleshoot D-Bus Conflicts](how-to/troubleshoot-dbus-conflicts.md)**: Handling coexistence and cleanly replacing GNOME Keyring or KWallet.
 
 #### Integration & Applications
@@ -46,7 +46,7 @@ docs/
 
 - **[Native IPC Specification](reference/native-ipc.md)**: Unix socket framing, protocol payloads, and peer authentication.
 - **[Storage Format](reference/storage-format.md)**: Encrypted vault format, Argon2id KDF sidecar, and permission invariants.
-- **[CLI Reference](reference/cli.md)**: `sigil-cli` command-line interface specification.
+- **[CLI Tooling](reference/cli.md)**: Standard CLI integration via `secret-tool` and `busctl`.
 
 ---
 
@@ -60,5 +60,5 @@ docs/
 
 ### Governance & Architecture
 
-- **[Architecture Decision Records](adr/index.md)**: Immutable technical decisions ([ADR-0001: Zero-Compromise Security Architecture](adr/0001-zero-compromise-memory-first-security-architecture.md)).
+- **[Architecture Decision Records](adr/index.md)**: Architectural decisions ([ADR-0001: Zero-Compromise Security Architecture](adr/0001-zero-compromise-memory-first-security-architecture.md), [ADR-0002: Industrial-Grade Zero-Friction Desktop Lifecycle](adr/0002-industrial-grade-zero-friction-desktop-lifecycle-and-envelope-vault.md)).
 - **[Governance Standards](governance/index.md)**: Modular documentation governance framework (protocol v3.1.0).

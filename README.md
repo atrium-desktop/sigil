@@ -1,158 +1,172 @@
 # sigil
 
-`sigil` is a cryptographically secure implementation of the
+`sigil` is an industrial-grade, zero-friction implementation of the
 [`org.freedesktop.secrets`](https://specifications.freedesktop.org/secret-service/latest/)
-Secret Service API for modern Linux desktops. It is designed to be a
-lightweight, headless-friendly drop-in replacement for gnome-keyring and KWallet.
+Secret Service specification and XDG Desktop Portal Secret backend for modern Linux desktops (Atrium, Tessera, Hyprland, Sway, River).
 
-## Key Features
+It provides a transparent, zero-touch credential lifecycle matching macOS Keychain quality:
+- **Zero-Touch Provisioning**: Initialized automatically on first user login via PAM. No CLI commands, no configuration dialogs.
+- **Envelope Multi-Slot Storage**: 256-bit CSPRNG `VolumeKey` protects bulk data; user passwords wrap the key in independent slots (`vault.slots/`).
+- **Race-Free Socket Activation**: Managed via `sigil.socket` on `%t/sigil/native.sock`. Eliminates cold-boot timing races.
+- **Away-from-Desk Memory Zeroization**: Monitored via systemd-logind. Screen lock or fast user switching (`Active=false`) instantly wipes keys in RAM using `zeroize::Zeroize`.
+- **Self-Healing Password Synchronization**: Catches `passwd` changes via `pam_sm_chauthtok` to atomically re-encrypt Slot 0. Administrator resets automatically trigger self-healing recovery prompts on next access.
 
-- **Strong cryptography**: XChaCha20-Poly1305 (AEAD) at-rest encryption; Argon2id key
-  derivation for password-protected vaults.
-- **Secure transit**: Full DH key exchange (`dh-ietf1024-sha256-aes128-cbc-pkcs7`) so
-  secrets are never exposed in plaintext on the D-Bus wire.
-- **Zero-friction unlock**: PAM module auto-unlocks the vault at login and re-unlocks after
-  screensaver dismissal — no separate password prompt.
-- **Two vault modes**: password-protected (recommended without FDE) or no-password/keyfile
-  (recommended with full-disk encryption). See [docs/explanation/unlock-strategies.md](docs/explanation/unlock-strategies.md).
-- **Headless support**: daemon runs without a display; secrets can be injected via
-  `SIGIL_PASSWORD` for IoT/server deployments.
-- **Broad compatibility**: works with browsers (Chrome, Firefox), VS Code, `secret-tool`,
-  and any application using `libsecret`.
+---
+
+## Architecture Overview
+
+```text
+                     Native Desktop Apps                         Sandboxed Flatpak / Snap Apps
+                              │                                                │
+                              ▼                                                ▼
+                   org.freedesktop.secrets                           org.freedesktop.portal.Secret
+                              │                                                │
+                              ▼                                                ▼
+                ┌───────────────────────────┐                         xdg-desktop-portal
+                │           sigil           │                                  │
+                │                           │                                  ▼
+                │  Secret Service adapter   │                         xdg-desktop-portal-atrium
+                │             │             │                                  │
+                │             ▼             │                                  ▼ (sigil-client)
+                │       sigil-service       │                       Unix Socket (SO_PEERCRED)
+                │       │           │       │                       /run/user/<uid>/sigil/native.sock
+                │       ▼           ▼       │                                  │
+                │     crypto      store     │◄─────────────────────────────────┤
+                │   (XChaCha20)  (Envelope) │                                  │
+                │                           │                                  ▼
+                │  native IPC server/socket │◄────────────────── pam_sigil.so (auth, session, chauthtok)
+                └─────────────┬─────────────┘
+                              │
+                              ▼
+                   systemd-logind system bus
+                   (Lock & Active=false monitoring)
+```
+
+---
 
 ## Quick Start
 
-### 1. Build
+### 1. Build from Source
 
 ```bash
 cargo build --release
 ```
 
-### 2. Pre-flight: free the `org.freedesktop.secrets` D-Bus name
+Binaries produced:
+- `target/release/sigil`: Core infrastructure daemon
+- `target/release/sigil-prompter`: Native GUI unlock & recovery prompter
+- `target/release/libpam_sigil.so`: Zero-disk PAM pass-through and password sync module
 
-Only one process can own `org.freedesktop.secrets` per session. Check who currently owns it
-and disable any other Secret Service provider before installing `sigil`:
+### 2. Install Binaries and Units
 
 ```bash
-busctl --user status org.freedesktop.secrets   # shows owning PID, or fails if no owner
+# Install binaries
+sudo install -m 0755 target/release/sigil /usr/bin/
+sudo install -m 0755 target/release/sigil-prompter /usr/bin/
+sudo install -m 0755 target/release/libpam_sigil.so /usr/lib/security/pam_sigil.so
 
-# Disable common conflicting providers (run only the ones that apply to you):
-systemctl --user disable --now gnome-keyring-daemon.service gcr-ssh-agent.socket 2>/dev/null
-systemctl --user mask  gnome-keyring-daemon.service 2>/dev/null   # GNOME / login keyring
-systemctl --user disable --now kwallet5.service kwalletd5.service 2>/dev/null
+# Install systemd user units
+mkdir -p ~/.config/systemd/user/
+cp systemd/user/sigil.service ~/.config/systemd/user/
+cp systemd/user/sigil.socket ~/.config/systemd/user/
 
-# Remove any stale per-user D-Bus activation file that points the bus name elsewhere:
+# Enable socket activation
+systemctl --user daemon-reload
+systemctl --user enable --now sigil.socket
+```
+
+### 3. Pre-flight: Clean Conflicting Providers
+
+Only one daemon can own `org.freedesktop.secrets` on the user session bus:
+
+```bash
+# Mask legacy keyrings
+systemctl --user mask gnome-keyring-daemon.service gnome-keyring-daemon.socket
+systemctl --user mask kwallet5.service kwalletd5.service
+
+# Remove stale D-Bus service files if present
 rm -f ~/.local/share/dbus-1/services/org.freedesktop.secrets.service
 ```
 
-If you skip this step the `sigil` systemd unit will fail to load with
-*"Two services allocated for the same bus name org.freedesktop.secrets"*. See
-[docs/how-to/troubleshoot-dbus-conflicts.md](docs/how-to/troubleshoot-dbus-conflicts.md).
+### 4. PAM Integration (Transparent Lifecycle)
 
-### 3. Install binaries and service
+Add `pam_sigil.so` to your system authentication and password stacks:
 
-```bash
-sudo cp target/release/sigil /usr/bin/
-sudo cp target/release/sigil-prompter /usr/bin/
-sudo cp target/release/sigil-cli /usr/bin/
-mkdir -p ~/.config/systemd/user/
-cp systemd/user/sigil.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now sigil.service
+#### Login & Session (`/etc/pam.d/system-login` or `/etc/pam.d/login`)
+```pam
+# Authenticate & capture token in memory
+auth       sufficient   pam_unix.so try_first_pass nullok
+auth       required     pam_deny.so
+
+# Password changes: cascade rotation to Slot 0
+password   sufficient   pam_unix.so sha512 shadow try_first_pass use_authtok
+password   optional     pam_sigil.so
+
+# Session: connect to socket-activated sigil after pam_systemd
+session    required     pam_systemd.so
+session    optional     pam_sigil.so
 ```
 
-### 4. Verify the daemon is the one answering
-
-```bash
-# Owning PID should match sigil.service MainPID:
-busctl --user status org.freedesktop.secrets | grep ^PID=
-systemctl --user show sigil.service --property=MainPID
-
-# Round-trip a secret to confirm libsecret clients reach sigil:
-secret-tool store --label=sigil-smoke smoke yes <<< ok && \
-  secret-tool lookup smoke yes && \
-  secret-tool clear  smoke yes
+#### Screen Locker (`/etc/pam.d/tessera-lock`, `/etc/pam.d/swaylock`, or `/etc/pam.d/hyprlock`)
+```pam
+#%PAM-1.0
+auth       sufficient   pam_unix.so try_first_pass
+auth       optional     pam_sigil.so
+account    include      system-login
+session    optional     pam_sigil.so
 ```
 
-On first start the daemon automatically initializes a no-password vault. If you want
-password protection instead, stop the daemon and initialize explicitly:
+---
+
+## Verification & Standard CLI Tooling
+
+`sigil` strictly implements the Freedesktop Secret Service standard. You can query, store, and inspect credentials using the standard `secret-tool` utility:
 
 ```bash
-systemctl --user stop sigil.service
-sigil-cli init
-systemctl --user start sigil.service
+# Store a credential
+secret-tool store --label="Test Secret" service test user alice
+
+# Lookup the credential
+secret-tool lookup service test user alice
+
+# Clear the credential
+secret-tool clear service test user alice
 ```
 
-### 5. PAM integration (optional)
-
-**Purpose.** The PAM module exists for one reason: to remove the manual unlock prompt.
-It captures your login password as PAM authenticates you, hands it to `sigil`, and
-the daemon derives the vault key from it. The same hook re-runs when you dismiss
-`swaylock`, so the vault re-unlocks automatically after the screensaver.
-
-**You do not need it if** any of the following holds:
-- You run a no-password (keyfile) vault — the daemon unlocks itself at startup.
-- You are happy to unlock manually via `sigil-cli unlock` or the GUI prompter.
-- You are deploying headless and set `SIGIL_PASSWORD=` in the unit file.
-
-**Install only if** you want zero-friction login + screensaver unlock for a
-password-protected vault, with zero disk footprint (passwords are transmitted
-directly into daemon memory via native Unix domain socket and immediately zeroized).
-
+Verify service status on D-Bus:
 ```bash
-# Build and install the PAM module
-sudo cp target/release/libpam_sigil.so /lib/security/pam_sigil.so
-
-# Add to login PAM stack (Arch: /etc/pam.d/system-login)
-echo "auth optional pam_sigil.so" | sudo tee -a /etc/pam.d/system-login
-
-# Add to swaylock for screensaver re-unlock
-echo "auth optional pam_sigil.so" | sudo tee -a /etc/pam.d/swaylock
+busctl --user status org.freedesktop.secrets
 ```
 
-For Debian/Ubuntu/Fedora PAM stack paths, no-password mode trade-offs, and headless setup,
-see [docs/how-to/configure-unlock.md](docs/how-to/configure-unlock.md).
-
-## Vault Management
-
-```bash
-sigil-cli init                 # first-time setup with password (prompted)
-sigil-cli init --no-password   # first-time setup without password (requires FDE)
-sigil-cli unlock               # unlock active session
-sigil-cli change-password      # change password
-sigil-cli clear-password       # switch to no-password mode
-sigil-cli set-password         # switch from no-password to password mode
-sigil-cli reset                # wipe vault (irreversible)
-```
+---
 
 ## Security Model
 
-| Layer | Mechanism |
+| Security Layer | Implementation Mechanism |
 |---|---|
-| At rest | XChaCha20-Poly1305 with per-save random nonce |
-| Key derivation | Argon2id (password mode) or OS-random keyfile (no-password mode) |
-| In memory | `Zeroize` on drop for all structs holding secrets |
-| In transit | AES-128-CBC over DH-negotiated session key |
+| **At-Rest Bulk Encryption** | XChaCha20-Poly1305 with random 256-bit `VolumeKey` |
+| **Slot Key Wrapping** | Argon2id (64 MiB RAM, 3 iterations, 4 lanes) |
+| **In-Transit Wire** | Diffie-Hellman Key Exchange (`dh-ietf1024-sha256-aes128-cbc-pkcs7`) |
+| **In-Memory Hardening** | `ZeroizeOnDrop`, `PR_SET_DUMPABLE = 0`, and `RLIMIT_CORE = 0` |
+| **Away-from-Desk Eviction** | Systemd-logind `Lock` signal & `Active=false` property zeroization |
+| **IPC Isolation** | Kernel-level `SO_PEERCRED` UID equality and system account filtering |
 
-See [SECURITY.md](SECURITY.md) for the full threat model and known limitations.
+---
 
 ## Documentation
 
-| Document | Contents |
-|---|---|
-| [docs/explanation/architecture.md](docs/explanation/architecture.md) | Component layout, data flows, D-Bus hierarchy |
-| [docs/explanation/unlock-strategies.md](docs/explanation/unlock-strategies.md) | Vault modes, PAM setup, screensaver integration |
-| [docs/explanation/freedesktop-spec.md](docs/explanation/freedesktop-spec.md) | Secret Service specification adherence |
-| [docs/how-to/configure-unlock.md](docs/how-to/configure-unlock.md) | How to configure unlock methods |
-| [docs/how-to/troubleshoot-dbus-conflicts.md](docs/how-to/troubleshoot-dbus-conflicts.md) | How to troubleshoot D-Bus conflicts |
-| [docs/dev/setup.md](docs/dev/setup.md) | Developer setup and building |
-| [docs/dev/development.md](docs/dev/development.md) | Build, test, debug, D-Bus inspection |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
+- **[ADR-0001: Zero-Compromise Memory-First Security Architecture](docs/adr/0001-zero-compromise-memory-first-security-architecture.md)**
+- **[ADR-0002: Industrial-Grade Zero-Friction Desktop Lifecycle](docs/adr/0002-industrial-grade-zero-friction-desktop-lifecycle-and-envelope-vault.md)**
+- **[Architecture Guide](docs/explanation/architecture.md)**
+- **[Threat Model](docs/explanation/threat-model.md)**
+- **[Vault Lifecycle & Recovery](docs/how-to/vault-lifecycle.md)**
+- **[Desktop & Compositor Setup](docs/how-to/desktop-setup.md)**
+- **[Packaging Guide](docs/how-to/packaging-guide.md)**
+- **[Storage Format Reference](docs/reference/storage-format.md)**
+- **[Native IPC Reference](docs/reference/native-ipc.md)**
 
-## Contributing
-
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting pull requests.
+---
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+Licensed under the [MIT License](LICENSE).

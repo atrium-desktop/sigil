@@ -2,11 +2,12 @@ use futures_util::StreamExt;
 use sigil_service::SigilService;
 use tracing::{error, info, warn};
 
-/// Subscribe to logind Session.Lock signal -> lock vault when screen locks.
+/// Subscribe to logind Session.Lock signal and Active=false property ->
+/// immediately destroy in-memory master keys upon screen lock, user switch, or seat deactivation.
 pub fn spawn_lock_listener(service: SigilService) {
     tokio::spawn(async move {
         if let Err(e) = run_lock_listener(service).await {
-            warn!("logind lock listener stopped: {}", e);
+            warn!("logind session listener stopped: {}", e);
         }
     });
 }
@@ -51,13 +52,33 @@ async fn run_lock_listener(service: SigilService) -> Result<(), Box<dyn std::err
     )
     .await?;
 
-    info!("Subscribed to logind Lock signal on {}", session_path);
-    let mut lock_stream = session.receive_signal("Lock").await?;
+    info!(
+        "Subscribed to logind Lock signal and session activity on {}",
+        session_path
+    );
 
-    while lock_stream.next().await.is_some() {
-        info!("Screen locked — locking credential vault.");
-        if let Err(e) = service.lock().await {
-            error!("Error locking vault on screen lock: {}", e);
+    let mut lock_stream = session.receive_signal("Lock").await?;
+    let mut active_stream = session.receive_property_changed::<bool>("Active").await;
+
+    loop {
+        tokio::select! {
+            Some(_) = lock_stream.next() => {
+                info!("Screen locked — zeroizing in-memory keys and locking vault.");
+                if let Err(e) = service.lock().await {
+                    error!("Error locking vault on screen lock: {}", e);
+                }
+            }
+            Some(prop_change) = active_stream.next() => {
+                if let Ok(active) = prop_change.get().await {
+                    if !active {
+                        info!("Session became inactive (user switched or display suspended) — locking vault.");
+                        if let Err(e) = service.lock().await {
+                            error!("Error locking vault on session deactivation: {}", e);
+                        }
+                    }
+                }
+            }
+            else => break,
         }
     }
 

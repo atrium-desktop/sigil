@@ -1,8 +1,9 @@
 [Unit]
 Description=sigil Secret Service Daemon
-Documentation=https://github.com/your-repo/sigil
+Documentation=https://github.com/atrium-os/sigil
+Wants=sigil.socket
+After=sigil.socket
 PartOf=graphical-session.target
-After=graphical-session.target
 
 [Service]
 Type=dbus

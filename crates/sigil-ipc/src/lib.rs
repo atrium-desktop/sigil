@@ -69,27 +69,15 @@ mod tests {
             other => panic!("Expected Secret, got {:?}", other),
         }
 
-        // Setup password vault on disk first
+        // Setup password vault on disk first via envelope initialization
         let password = "TestPassword123!";
-        let salt = sigil_crypto::generate_salt(32);
-        let params = sigil_crypto::KdfParams {
-            m_cost: 1024,
-            t_cost: 1,
-            p_cost: 1,
-            version: 0x13,
-        };
-        let key = sigil_crypto::derive_key_argon2id(password.as_bytes(), &salt, &params).unwrap();
-        store.save(&key, &sigil_store::StoredVaultData::default()).unwrap();
-        let salt_hex: String = salt.iter().map(|b| format!("{:02x}", b)).collect();
-        std::fs::write(store.salt_path(), &salt_hex).unwrap();
-        let kdf_bytes = sigil_crypto::encode_kdf(&params, &salt_hex).unwrap();
-        std::fs::write(store.kdf_path(), kdf_bytes).unwrap();
+        store.initialize_with_password(password).unwrap();
 
         // Lock the service
         write_request(&mut stream, &IpcRequest::Lock).await.unwrap();
         let resp = read_response(&mut stream).await.unwrap();
         assert!(matches!(resp, IpcResponse::Success));
-        assert_eq!(service.lock_state().await, sigil_core::LockState::Locked);
+        assert_eq!(service.lock_state().await, sigil_domain::LockState::Locked);
 
         // Unlock using synchronous socket (mimicking PAM module)
         let mut sync_stream = std::os::unix::net::UnixStream::connect(&sock_path).unwrap();
@@ -102,7 +90,7 @@ mod tests {
         .unwrap();
         let sync_resp = read_response_sync(&mut sync_stream).unwrap();
         assert!(matches!(sync_resp, IpcResponse::Success));
-        assert_eq!(service.lock_state().await, sigil_core::LockState::Unlocked);
+        assert_eq!(service.lock_state().await, sigil_domain::LockState::Unlocked);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

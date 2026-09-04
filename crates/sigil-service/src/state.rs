@@ -146,6 +146,15 @@ impl SigilService {
         Ok(())
     }
 
+    pub async fn unlock_with_password(&self, password: &str) -> Result<()> {
+        let store = {
+            let inner = self.inner.read().await;
+            inner.store.clone()
+        };
+        let key = store.derive_key_with_password(password)?;
+        self.unlock_with_master_key(key).await
+    }
+
     pub async fn derive_app_secret(
         &self,
         namespace: &Namespace,

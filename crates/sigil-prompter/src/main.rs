@@ -84,10 +84,10 @@ impl PrompterState {
 
                 frame.spacer(4.0);
 
-                if frame.textfield_password("##pwd", &mut self.password, "Master Password") {
-                    if self.error_message.is_some() {
-                        self.error_message = None;
-                    }
+                if frame.textfield_password("##pwd", &mut self.password, "Master Password")
+                    && self.error_message.is_some()
+                {
+                    self.error_message = None;
                 }
 
                 if let Some(err) = self.error_message {

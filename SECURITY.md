@@ -10,7 +10,7 @@
 | Session key recovery from process memory | AES session keys are stored in `Vec<u8>` with a custom `Drop` that calls `zeroize()` |
 | Concurrent unlock spawning multiple prompts | `is_unlocking` flag checked and set atomically under a single write lock |
 | Malformed DH public key (small-subgroup attack) | Client public key validated: `1 < key < p−1` per RFC 2409 before any computation |
-| PAM token lingering on disk | Token is read and deleted immediately; in screensaver path, deleted before unlock attempt |
+| PAM credential transit | Credentials transmitted directly over native Unix socket in memory with `SO_PEERCRED`; zeroized immediately; zero disk footprint |
 | Prompter process hijacking | Socket path is inside `$XDG_RUNTIME_DIR` (mode 0700, owned by user) |
 | Secret access after screen lock | logind `Session.Lock` signal evicts the vault key (`vault = None`); subsequent D-Bus requests trigger re-unlock |
 
@@ -78,21 +78,21 @@ NIST guidance, no client library supports a stronger group for this protocol. Th
 key only protects the D-Bus wire transport (loopback), not the vault at rest. The vault uses
 XChaCha20-Poly1305 with a 256-bit key, which is not affected.
 
-### PAM token is plaintext on disk
-`sigil-pam` writes the login password (in password mode) to `/run/user/<UID>/sigil-pam-token`
-(mode 0600) upon `pam_setcred(PAM_ESTABLISH_CRED)`. The file exists only for the brief window between credential
-establishment and the daemon reading and zeroizing it.
+### PAM credential transit is memory-only
+`sigil-pam` connects directly to the daemon's native Unix domain socket (`$XDG_RUNTIME_DIR/sigil/native.sock`)
+using in-memory length-delimited framing. Passwords are never written to disk or tmpfs files. The daemon
+verifies peer credentials via `SO_PEERCRED` and both PAM and daemon zeroize authentication buffers immediately
+after key derivation.
 
 ### `vault.key` is plaintext on disk (no-password mode)
 In no-password mode the vault key is stored unencrypted in `vault.key` (mode 0600). Anyone
 with read access to the file can decrypt the vault. This mode is only appropriate when
 full-disk encryption (e.g. LUKS) provides the outer protection layer.
 
-### `Service.Lock()` D-Bus call is a no-op
-`Service.Lock()` currently returns success without evicting decrypted data from memory.
-Screen locking via the logind `Session.Lock` signal **does** evict the vault key and mark
-the vault as locked — but an explicit D-Bus `Lock` call from a client application has no
-effect. A full implementation would also zeroize in-memory item secrets on `Lock`.
+### `Service.Lock()` evicts secrets and locks vault
+`Service.Lock()` triggers vault locking, dropping the master key and securely zeroizing all in-memory
+decrypted item secrets across collections. Screen locking via logind `Session.Lock` signal triggers
+the same immediate eviction pipeline.
 
 ### Portal (`org.freedesktop.portal.Secret`) Per-App Secret Derivation
 The `xdg-desktop-portal` integration implements `org.freedesktop.impl.portal.Secret`. It derives a 256-bit per-application secret using `HKDF-SHA256(salt="org.freedesktop.portal.Secret", IKM=master_key, info=app_id)` and writes it to the provided file descriptor, zeroizing in-memory secrets after transmission.

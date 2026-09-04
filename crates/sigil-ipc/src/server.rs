@@ -8,6 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use tokio::net::{UnixListener, UnixStream};
 use tracing::{debug, error, info};
+use zeroize::Zeroize;
 
 pub struct NativeIpcServer {
     socket_path: PathBuf,
@@ -85,6 +86,14 @@ async fn handle_connection(mut stream: UnixStream, service: SigilService) -> Res
                 Ok(_) => IpcResponse::Success,
                 Err(e) => IpcResponse::Error(e.to_string()),
             },
+            IpcRequest::UnlockWithPassword { mut password } => {
+                let res = service.unlock_with_password(&password).await;
+                password.zeroize();
+                match res {
+                    Ok(_) => IpcResponse::Success,
+                    Err(e) => IpcResponse::Error(e.to_string()),
+                }
+            }
             IpcRequest::GetApplicationSecret {
                 namespace,
                 subject,

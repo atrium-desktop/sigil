@@ -99,6 +99,35 @@ impl FileVaultStore {
         self.key_path().exists()
     }
 
+    pub fn is_password_mode(&self) -> bool {
+        self.salt_path().exists() || self.kdf_path().exists()
+    }
+
+    pub fn derive_key_with_password(&self, password: &str) -> Result<MasterKey> {
+        let (params, salt_hex) = if self.kdf_path().exists() {
+            let kdf_bytes = fs::read(self.kdf_path())?;
+            sigil_crypto::decode_kdf(&kdf_bytes)?
+        } else if self.salt_path().exists() {
+            let salt_str = fs::read_to_string(self.salt_path())?;
+            (sigil_crypto::KdfParams::default(), salt_str.trim().to_string())
+        } else {
+            return Err(SigilError::StorageFailure(
+                "No salt or KDF configuration found for vault".into(),
+            ));
+        };
+
+        let mut salt = Vec::new();
+        for i in (0..salt_hex.len()).step_by(2) {
+            if i + 2 <= salt_hex.len() {
+                let byte = u8::from_str_radix(&salt_hex[i..i + 2], 16)
+                    .map_err(|e| SigilError::CryptoFailure(format!("Invalid salt hex: {e}")))?;
+                salt.push(byte);
+            }
+        }
+
+        sigil_crypto::derive_key_argon2id(password.as_bytes(), &salt, &params)
+    }
+
     pub fn read_keyfile(&self) -> Result<MasterKey> {
         let path = self.key_path();
         let meta = fs::symlink_metadata(&path)?;

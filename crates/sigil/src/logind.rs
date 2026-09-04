@@ -1,10 +1,9 @@
-use sigil_service::SigilService;
 use futures_util::StreamExt;
-use std::path::PathBuf;
+use sigil_service::SigilService;
 use tracing::{error, info, warn};
 
 /// Subscribe to logind Session.Lock signal -> lock vault when screen locks.
-pub fn spawn_lock_listener(service: SigilService, _data_dir: PathBuf) {
+pub fn spawn_lock_listener(service: SigilService) {
     tokio::spawn(async move {
         if let Err(e) = run_lock_listener(service).await {
             warn!("logind lock listener stopped: {}", e);

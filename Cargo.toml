@@ -41,5 +41,4 @@ lens = { git = "https://github.com/ming2k/optics", tag = "v0.0.34" }
 lens-sys = { git = "https://github.com/ming2k/optics", tag = "v0.0.34" }
 flux = { git = "https://github.com/ming2k/optics", tag = "v0.0.34" }
 flux-sys = { git = "https://github.com/ming2k/optics", tag = "v0.0.34" }
-inotify = { version = "0.10", features = ["stream"] }
 libc = "0.2"

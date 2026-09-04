@@ -1,74 +1,87 @@
 use pamsm::{pam_module, Pam, PamError, PamFlag, PamLibExt, PamServiceModule};
+use sigil_ipc::{read_response_sync, write_request_sync, IpcRequest};
 use std::ffi::CString;
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
+use std::time::Duration;
+use zeroize::Zeroize;
 
 struct SigilPam;
 
-fn write_pam_token(pamh: &Pam) -> PamError {
+/// Attempts to unlock the sigil vault by sending the password directly to the
+/// daemon's native Unix domain socket in memory.
+///
+/// Under no circumstances does this function write passwords to the filesystem.
+/// All memory buffers containing authentication tokens are zeroized upon completion.
+fn unlock_via_socket(pamh: &Pam) -> PamError {
     let user = match pamh.get_cached_user() {
         Ok(Some(u)) => u.to_string_lossy().into_owned(),
         _ => return PamError::SUCCESS,
     };
 
-    let authtok = match pamh.get_cached_authtok() {
+    let mut authtok = match pamh.get_cached_authtok() {
         Ok(Some(tok)) => tok.to_string_lossy().into_owned(),
         _ => return PamError::SUCCESS,
     };
 
     if authtok.is_empty() {
+        authtok.zeroize();
         return PamError::SUCCESS;
     }
 
     let c_user = match CString::new(user) {
         Ok(c) => c,
-        Err(_) => return PamError::SUCCESS,
+        Err(_) => {
+            authtok.zeroize();
+            return PamError::SUCCESS;
+        }
     };
 
     let passwd = unsafe { libc::getpwnam(c_user.as_ptr()) };
     if passwd.is_null() {
+        authtok.zeroize();
         return PamError::SUCCESS;
     }
 
     let uid = unsafe { (*passwd).pw_uid };
-    let gid = unsafe { (*passwd).pw_gid };
 
-    let path_str = format!("/run/user/{}/sigil-pam-token", uid);
+    // Native IPC socket path: /run/user/<uid>/sigil/native.sock
+    let socket_path = PathBuf::from(format!("/run/user/{}/sigil/native.sock", uid));
 
-    let mut file = match OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(&path_str)
-    {
-        Ok(f) => f,
-        Err(_) => return PamError::SUCCESS,
-    };
-
-    if file.write_all(authtok.as_bytes()).is_err() {
+    if !socket_path.exists() {
+        authtok.zeroize();
         return PamError::SUCCESS;
     }
-    let _ = file.flush();
 
-    let c_path = match CString::new(path_str) {
-        Ok(c) => c,
-        Err(_) => return PamError::SUCCESS,
+    let mut stream = match UnixStream::connect(&socket_path) {
+        Ok(s) => s,
+        Err(_) => {
+            authtok.zeroize();
+            return PamError::SUCCESS;
+        }
     };
 
-    unsafe { libc::chown(c_path.as_ptr(), uid, gid) };
+    // Protect against blocking PAM login if daemon is busy/slow
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
+
+    let req = IpcRequest::UnlockWithPassword {
+        password: authtok.clone(),
+    };
+    authtok.zeroize();
+
+    if write_request_sync(&mut stream, &req).is_ok() {
+        let _ = read_response_sync(&mut stream);
+    }
 
     PamError::SUCCESS
 }
 
 impl PamServiceModule for SigilPam {
     fn authenticate(pamh: Pam, _flags: PamFlag, _args: Vec<String>) -> PamError {
-        // Authenticate hook: only verify user exists.
-        // Token planting is deferred to setcred / open_session when authentication is fully committed.
-        if pamh.get_cached_user().is_err() {
-            return PamError::USER_UNKNOWN;
-        }
+        // Screensavers (e.g. swaylock) perform authentication to unlock screen.
+        // We attempt direct socket unlock here.
+        unlock_via_socket(&pamh);
         PamError::SUCCESS
     }
 
@@ -76,15 +89,14 @@ impl PamServiceModule for SigilPam {
         match flags {
             PamFlag::DELETE_CRED => {}
             _ => {
-                write_pam_token(&pamh);
+                unlock_via_socket(&pamh);
             }
         }
         PamError::SUCCESS
     }
 
     fn open_session(pamh: Pam, _flags: PamFlag, _args: Vec<String>) -> PamError {
-        // Fallback planting in case caller commits via session open instead of setcred
-        write_pam_token(&pamh);
+        unlock_via_socket(&pamh);
         PamError::SUCCESS
     }
 

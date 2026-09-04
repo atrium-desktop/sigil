@@ -54,17 +54,17 @@ separate prompt is needed. Two mechanisms work together:
 
 ### A — PAM (login-time unlock)
 
-`pam_sigil.so` intercepts the authentication token during login and writes it to a temporary
-file. The daemon reads it at startup and unlocks.
+`pam_sigil.so` captures the authentication token during login and transmits it directly over
+the native Unix domain socket (`$XDG_RUNTIME_DIR/sigil/native.sock`) in memory with `SO_PEERCRED`
+kernel authentication. Zero bytes are written to disk or tmpfs.
 
-- **Password mode**: the token content is used to derive the vault key.
-- **No-password mode**: the token is used only as a signal that login succeeded; the actual
-  key comes from `vault.key`.
+- **Password mode**: the password is used in-memory to derive the Argon2id vault key, then immediately zeroized.
+- **No-password mode**: the vault unlocks itself via `vault.key` upon daemon startup without PAM interaction.
 
 ### B — Screensaver integration (swaylock)
 
 Add `pam_sigil.so` to swaylock's PAM stack so the daemon re-unlocks automatically when the
 screensaver is dismissed.
 
-Lock → vault locks (logind `Session.Lock` signal).
-Unlock → swaylock writes PAM token → daemon detects it via inotify → re-unlocks.
+Lock → vault locks and evicts keys (logind `Session.Lock` signal).
+Unlock → swaylock authenticates via PAM → `pam_sigil.so` connects to native Unix socket in memory → vault re-unlocks.

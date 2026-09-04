@@ -96,8 +96,8 @@ the daemon derives the vault key from it. The same hook re-runs when you dismiss
 - You are deploying headless and set `SIGIL_PASSWORD=` in the unit file.
 
 **Install only if** you want zero-friction login + screensaver unlock for a
-password-protected vault, and you accept that your login password is briefly written to
-`/run/user/<uid>/sigil-pam-token` (tmpfs, mode `0600`, deleted on read).
+password-protected vault, with zero disk footprint (passwords are transmitted
+directly into daemon memory via native Unix domain socket and immediately zeroized).
 
 ```bash
 # Build and install the PAM module

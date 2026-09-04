@@ -1,6 +1,5 @@
 use sigil_crypto::{
-    decode_kdf, derive_key_argon2id, encode_kdf, generate_salt, KdfParams, MasterKey,
-    DEFAULT_SALT_LEN,
+    derive_key_argon2id, encode_kdf, generate_salt, KdfParams, MasterKey, DEFAULT_SALT_LEN,
 };
 use sigil_store::{atomic_replace, FileVaultStore, StoredVaultData};
 use directories::ProjectDirs;
@@ -40,29 +39,10 @@ fn vault_paths() -> VaultPaths {
 fn load_password_vault(
     password: &str,
     vault_path: &Path,
-    salt_path: &Path,
-    kdf_path: &Path,
 ) -> Result<(MasterKey, StoredVaultData), Box<dyn std::error::Error>> {
     let parent = vault_path.parent().ok_or("Invalid vault path parent")?;
     let store = FileVaultStore::new(parent.to_path_buf());
-
-    let (params, salt_hex) = if kdf_path.exists() {
-        let kdf_bytes = std::fs::read(kdf_path)?;
-        decode_kdf(&kdf_bytes)?
-    } else if salt_path.exists() {
-        let salt_str = std::fs::read_to_string(salt_path)?;
-        (KdfParams::default(), salt_str.trim().to_string())
-    } else {
-        return Err("No salt or KDF config found for vault".into());
-    };
-
-    let mut salt = Vec::new();
-    for i in (0..salt_hex.len()).step_by(2) {
-        let byte = u8::from_str_radix(&salt_hex[i..i + 2], 16)?;
-        salt.push(byte);
-    }
-
-    let key = derive_key_argon2id(password.as_bytes(), &salt, &params)?;
+    let key = store.derive_key_with_password(password)?;
     let data = store.load(&key)?;
     Ok((key, data))
 }
@@ -169,7 +149,7 @@ fn change_password() {
 
     let mut current_password = read_password("Current password: ");
     let (_old_key, data) =
-        match load_password_vault(&current_password, &paths.vault, &paths.salt, &paths.kdf) {
+        match load_password_vault(&current_password, &paths.vault) {
             Ok(res) => res,
             Err(e) => {
                 current_password.zeroize();

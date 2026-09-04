@@ -103,4 +103,22 @@ impl SigilClient {
             other => Err(ClientError::DaemonError(format!("Unexpected response: {:?}", other))),
         }
     }
+
+    /// Unlocks the credential service with a password over secure native IPC.
+    pub async fn unlock_with_password(&self, password: &str) -> Result<()> {
+        let mut stream = self.open_stream().await?;
+        write_request(
+            &mut stream,
+            &IpcRequest::UnlockWithPassword {
+                password: password.to_string(),
+            },
+        )
+        .await?;
+        match read_response(&mut stream).await? {
+            IpcResponse::Success => Ok(()),
+            IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
+            IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
+            other => Err(ClientError::DaemonError(format!("Unexpected response: {:?}", other))),
+        }
+    }
 }

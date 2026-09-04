@@ -18,6 +18,10 @@ pub enum IpcRequest {
     GetLockStatus,
     /// Lock the vault, clearing in-memory keys
     Lock,
+    /// Unlock the vault using a password provided over IPC (e.g. from PAM or prompter)
+    UnlockWithPassword {
+        password: String,
+    },
     /// Ping the daemon to test connectivity
     Ping,
 }

@@ -67,3 +67,32 @@ pub async fn read_response<R: AsyncRead + Unpin>(reader: &mut R) -> Result<IpcRe
 
     Ok(resp)
 }
+
+pub fn write_request_sync<W: std::io::Write>(writer: &mut W, req: &IpcRequest) -> Result<()> {
+    let payload = serde_json::to_vec(req)
+        .map_err(|e| SigilError::Internal(format!("Serialization error: {e}")))?;
+
+    let len = payload.len() as u32;
+    writer.write_all(&len.to_be_bytes())?;
+    writer.write_all(&payload)?;
+    writer.flush()?;
+    Ok(())
+}
+
+pub fn read_response_sync<R: std::io::Read>(reader: &mut R) -> Result<IpcResponse> {
+    let mut len_bytes = [0u8; 4];
+    reader.read_exact(&mut len_bytes)?;
+    let len = u32::from_be_bytes(len_bytes) as usize;
+
+    if len > MAX_FRAME_SIZE {
+        return Err(SigilError::InvalidRequest("Frame size exceeds limit".into()));
+    }
+
+    let mut buf = vec![0u8; len];
+    reader.read_exact(&mut buf)?;
+
+    let resp: IpcResponse = serde_json::from_slice(&buf)
+        .map_err(|e| SigilError::InvalidRequest(format!("Deserialization error: {e}")))?;
+
+    Ok(resp)
+}

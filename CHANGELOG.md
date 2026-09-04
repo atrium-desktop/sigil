@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security & Architecture (ADR-0001)
+- **Zero-disk PAM credential transit**: Completely eliminated `/run/user/<uid>/sigil-pam-token` plaintext token file. `pam_sigil.so` now connects directly to the daemon's native Unix socket in memory with `SO_PEERCRED` kernel credential verification and immediate memory zeroization.
+- **Removed insecure auto-keyfile default**: The daemon no longer automatically creates an unencrypted `vault.key` on empty vault directories. Vaults must be explicitly initialized with an Argon2id password, preventing accidental unprotected deployments.
+- **Process memory anti-forensics**: Enabled `PR_SET_DUMPABLE=0` (blocking `ptrace` and `/proc/$pid/mem` snooping) and `RLIMIT_CORE=0` (disabling core dumps containing keys) on daemon startup.
+- **In-memory IPC unlock protocol**: Added `UnlockWithPassword` command to Native IPC server and client for secure memory-only unlocking.
+- **ADR adoption**: Added architecture decision records in `docs/adr/` documenting the Zero-Compromise Security Architecture (ADR-0001).
+
 ## [1.2.1] - 2026-09-05
 
 - Migrated `sigil-prompter` to native Optics (iris/lens) stack, completely removing GTK4 and Libadwaita dependencies.

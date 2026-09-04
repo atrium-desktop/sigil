@@ -10,3 +10,5 @@ name = "pam_sigil"
 [dependencies]
 pamsm = { version = "0.4.3", features = ["libpam"] }
 libc = "0.2"
+sigil-ipc = { path = "../sigil-ipc" }
+zeroize = { workspace = true, features = ["derive"] }

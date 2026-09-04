@@ -2,6 +2,7 @@
 name = "sigil-pam"
 version = "1.2.2"
 edition = "2021"
+license.workspace = true
 
 [lib]
 crate-type = ["cdylib"]

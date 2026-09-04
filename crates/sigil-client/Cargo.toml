@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Sigil Project"]
 description = "Async client library for sigil native IPC"
+license.workspace = true
 
 [dependencies]
 sigil-core = { path = "../sigil-core" }

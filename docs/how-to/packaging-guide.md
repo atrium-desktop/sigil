@@ -51,7 +51,7 @@ pkgrel=1
 pkgdesc="Secure, memory-first Freedesktop Secret Service implementation"
 arch=('x86_64' 'aarch64')
 url="https://github.com/atrium-desktop/sigil"
-license=('Apache-2.0' 'MIT')
+license=('MIT')
 depends=('pam' 'systemd')
 makedepends=('cargo' 'pkgconf')
 optdepends=(
@@ -115,7 +115,7 @@ Version:        1.2.2
 Release:        1%{?dist}
 Summary:        Memory-first Secret Service daemon and PAM module
 
-License:        Apache-2.0 OR MIT
+License:        MIT
 URL:            https://github.com/atrium-desktop/sigil
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz
 
@@ -234,7 +234,7 @@ rustPlatform.buildRustPackage rec {
   meta = with lib; {
     description = "Hardened, memory-first Freedesktop Secret Service daemon";
     homepage = "https://github.com/atrium-desktop/sigil";
-    license = licenses.asl20;
+    license = licenses.mit;
     platforms = platforms.linux;
   };
 }

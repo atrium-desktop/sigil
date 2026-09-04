@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Sigil Project"]
 description = "Secure durable storage and vault file persistence for sigil"
+license.workspace = true
 
 [dependencies]
 sigil-core = { path = "../sigil-core" }

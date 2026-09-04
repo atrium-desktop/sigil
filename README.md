@@ -152,3 +152,7 @@ See [SECURITY.md](SECURITY.md) for the full threat model and known limitations.
 ## Contributing
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting pull requests.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

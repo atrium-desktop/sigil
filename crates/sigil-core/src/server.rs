@@ -8,6 +8,31 @@ use tokio::net::{UnixListener, UnixStream};
 use tracing::{debug, error, info};
 use zeroize::Zeroize;
 
+fn get_systemd_listener() -> Option<UnixListener> {
+    if let Ok(pid_str) = std::env::var("LISTEN_PID") {
+        if let Ok(pid) = pid_str.parse::<u32>() {
+            if pid != std::process::id() {
+                return None;
+            }
+        }
+    }
+    if let Ok(fds_str) = std::env::var("LISTEN_FDS") {
+        if let Ok(fds) = fds_str.parse::<usize>() {
+            if fds >= 1 {
+                // SD_LISTEN_FDS_START is 3
+                let raw_fd = 3;
+                unsafe {
+                    use std::os::unix::io::FromRawFd;
+                    let std_listener = std::os::unix::net::UnixListener::from_raw_fd(raw_fd);
+                    std_listener.set_nonblocking(true).ok()?;
+                    return UnixListener::from_std(std_listener).ok();
+                }
+            }
+        }
+    }
+    None
+}
+
 pub struct NativeIpcServer {
     socket_path: PathBuf,
     service: SigilService,
@@ -22,23 +47,29 @@ impl NativeIpcServer {
     }
 
     pub async fn run(self) -> Result<()> {
-        if let Some(parent) = self.socket_path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)?;
-                fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
+        let listener = if let Some(l) = get_systemd_listener() {
+            info!("Native IPC server adopting systemd socket activation on fd 3");
+            l
+        } else {
+            if let Some(parent) = self.socket_path.parent() {
+                if !parent.exists() {
+                    fs::create_dir_all(parent)?;
+                    fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
+                }
             }
-        }
 
-        if self.socket_path.exists() {
-            let _ = fs::remove_file(&self.socket_path);
-        }
+            if self.socket_path.exists() {
+                let _ = fs::remove_file(&self.socket_path);
+            }
 
-        let listener = UnixListener::bind(&self.socket_path)?;
-        fs::set_permissions(&self.socket_path, fs::Permissions::from_mode(0o600))?;
-        info!(
-            "Native IPC server listening on {}",
-            self.socket_path.display()
-        );
+            let l = UnixListener::bind(&self.socket_path)?;
+            fs::set_permissions(&self.socket_path, fs::Permissions::from_mode(0o600))?;
+            info!(
+                "Native IPC server listening on {}",
+                self.socket_path.display()
+            );
+            l
+        };
 
         loop {
             match listener.accept().await {

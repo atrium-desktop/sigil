@@ -1,6 +1,6 @@
 use pamsm::{pam_module, Pam, PamError, PamFlag, PamLibExt, PamServiceModule};
 use sigil_ipc::{read_response_sync, write_request_sync, IpcRequest};
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -50,40 +50,94 @@ fn get_target_uid(pamh: &Pam) -> Option<u32> {
     Some(uid)
 }
 
-/// Connects to the user's sigil native socket with a safety timeout.
-fn connect_to_socket(uid: u32) -> Option<UnixStream> {
-    let socket_path = PathBuf::from(format!("/run/user/{}/sigil/native.sock", uid));
-    if !socket_path.exists() {
-        return None;
+/// Emits an audit message to the system authentication syslog facility.
+fn log_pam(msg: &str) {
+    if let Ok(c_msg) = CString::new(format!("pam_sigil: {}", msg)) {
+        unsafe {
+            libc::syslog(
+                libc::LOG_AUTH | libc::LOG_INFO,
+                c"%s".as_ptr(),
+                c_msg.as_ptr(),
+            );
+        }
     }
+}
 
-    let stream = UnixStream::connect(&socket_path).ok()?;
-    let _ = stream.set_read_timeout(Some(Duration::from_millis(3000)));
-    let _ = stream.set_write_timeout(Some(Duration::from_millis(3000)));
-    Some(stream)
+/// Connects to the user's sigil native socket. If `wait` is true, polls with backoff
+/// to accommodate user session socket creation during cold boot or first login.
+fn connect_to_socket(uid: u32, wait: bool) -> Option<UnixStream> {
+    let socket_path = PathBuf::from(format!("/run/user/{}/sigil/native.sock", uid));
+    let timeout = if wait {
+        Duration::from_millis(2500)
+    } else {
+        Duration::ZERO
+    };
+    let start = std::time::Instant::now();
+
+    loop {
+        if socket_path.exists() {
+            if let Ok(stream) = UnixStream::connect(&socket_path) {
+                let _ = stream.set_read_timeout(Some(Duration::from_millis(3000)));
+                let _ = stream.set_write_timeout(Some(Duration::from_millis(3000)));
+                return Some(stream);
+            }
+        }
+        if start.elapsed() >= timeout {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+/// Stashes the authenticated password in the PAM handle data context so that
+/// downstream hooks (such as `open_session` or `setcred`) can retrieve it even
+/// if intermediate modules or display managers clear `PAM_AUTHTOK`.
+fn stash_password_if_present(pamh: &Pam) {
+    if let Ok(Some(tok)) = pamh.get_cached_authtok() {
+        let bytes = tok.to_bytes_with_nul().to_vec();
+        let _ = pamh.send_bytes("sigil_authtok", bytes, None);
+    }
+}
+
+/// Retrieves the plaintext authentication token either directly from PAM cached authtok
+/// or from our cross-hook PAM handle stash.
+fn get_target_password(pamh: &Pam) -> Option<String> {
+    if let Ok(Some(tok)) = pamh.get_cached_authtok() {
+        let s = tok.to_string_lossy().into_owned();
+        if !s.is_empty() {
+            return Some(s);
+        }
+    }
+    if let Ok(bytes) = pamh.retrieve_bytes("sigil_authtok") {
+        if let Ok(cstr) = CStr::from_bytes_until_nul(&bytes) {
+            let s = cstr.to_string_lossy().into_owned();
+            if !s.is_empty() {
+                return Some(s);
+            }
+        }
+    }
+    None
 }
 
 /// Attempts to unlock the sigil vault by sending the password directly to the
 /// daemon's native Unix domain socket in volatile memory.
-fn unlock_via_socket(pamh: &Pam) -> PamError {
+fn unlock_via_socket(pamh: &Pam, wait: bool) -> PamError {
     let uid = match get_target_uid(pamh) {
         Some(u) => u,
         None => return PamError::SUCCESS,
     };
 
-    let mut authtok = match pamh.get_cached_authtok() {
-        Ok(Some(tok)) => tok.to_string_lossy().into_owned(),
-        _ => return PamError::SUCCESS,
+    let mut authtok = match get_target_password(pamh) {
+        Some(tok) => tok,
+        None => return PamError::SUCCESS,
     };
 
-    if authtok.is_empty() {
-        authtok.zeroize();
-        return PamError::SUCCESS;
-    }
-
-    let mut stream = match connect_to_socket(uid) {
+    let mut stream = match connect_to_socket(uid, wait) {
         Some(s) => s,
         None => {
+            if wait {
+                log_pam(&format!("timed out waiting for native socket for uid {}", uid));
+            }
             authtok.zeroize();
             return PamError::SUCCESS;
         }
@@ -95,7 +149,19 @@ fn unlock_via_socket(pamh: &Pam) -> PamError {
     authtok.zeroize();
 
     if write_request_sync(&mut stream, &req).is_ok() {
-        let _ = read_response_sync(&mut stream);
+        if let Ok(resp) = read_response_sync(&mut stream) {
+            match resp {
+                sigil_ipc::IpcResponse::Success => {
+                    log_pam(&format!("vault transparently unlocked for uid {}", uid));
+                }
+                sigil_ipc::IpcResponse::Desynced => {
+                    log_pam(&format!("vault credentials desynchronized for uid {}", uid));
+                }
+                other => {
+                    log_pam(&format!("vault unlock response: {:?} for uid {}", other, uid));
+                }
+            }
+        }
     }
 
     PamError::SUCCESS
@@ -124,9 +190,10 @@ fn rekey_via_socket(pamh: &Pam) -> PamError {
         return PamError::SUCCESS;
     }
 
-    let mut stream = match connect_to_socket(uid) {
+    let mut stream = match connect_to_socket(uid, true) {
         Some(s) => s,
         None => {
+            log_pam(&format!("chauthtok: timed out waiting for socket for uid {}", uid));
             old_authtok.zeroize();
             new_authtok.zeroize();
             return PamError::SUCCESS;
@@ -142,7 +209,9 @@ fn rekey_via_socket(pamh: &Pam) -> PamError {
         new_authtok.zeroize();
 
         if write_request_sync(&mut stream, &req).is_ok() {
-            let _ = read_response_sync(&mut stream);
+            if let Ok(resp) = read_response_sync(&mut stream) {
+                log_pam(&format!("chauthtok: slot rotation result: {:?} for uid {}", resp, uid));
+            }
         }
     } else {
         // Old password not provided (e.g. root changed password via `sudo passwd`)
@@ -155,7 +224,9 @@ fn rekey_via_socket(pamh: &Pam) -> PamError {
 
 impl PamServiceModule for SigilPam {
     fn authenticate(pamh: Pam, _flags: PamFlag, _args: Vec<String>) -> PamError {
-        unlock_via_socket(&pamh);
+        stash_password_if_present(&pamh);
+        // Fast path: if the user session/daemon is already active (e.g. screen locker), unlock immediately
+        unlock_via_socket(&pamh, false);
         PamError::SUCCESS
     }
 
@@ -163,14 +234,16 @@ impl PamServiceModule for SigilPam {
         match flags {
             PamFlag::DELETE_CRED => {}
             _ => {
-                unlock_via_socket(&pamh);
+                // Screen lockers (e.g. tessera-lock) commit credentials via pam_setcred
+                unlock_via_socket(&pamh, false);
             }
         }
         PamError::SUCCESS
     }
 
     fn open_session(pamh: Pam, _flags: PamFlag, _args: Vec<String>) -> PamError {
-        unlock_via_socket(&pamh);
+        // Cold-boot login: pam_systemd has just set up /run/user/<uid>, wait for socket activation
+        unlock_via_socket(&pamh, true);
         PamError::SUCCESS
     }
 

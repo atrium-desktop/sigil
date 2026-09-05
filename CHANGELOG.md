@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.3] - 2026-09-08
+
+### Added & Improved
+- **Systemd Socket Activation**: `NativeIpcServer` now inspects `LISTEN_FDS` / `LISTEN_PID` to adopt systemd-passed socket fd 3 directly, enabling seamless socket activation and zero-race startup.
+- **Robust PAM Cold-Boot Session Unlocking**: `pam_sigil` now stashes authenticated credentials in the PAM handle context to survive downstream hooks, polls with backoff for the native socket during initial login, and logs syslog audit events on unlock and credential rotation.
+
 ## [1.3.2] - 2026-09-08
 
 ### Architecture & Refactoring (Uncompromised Best Practice)

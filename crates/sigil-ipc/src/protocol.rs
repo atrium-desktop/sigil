@@ -7,7 +7,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 ///
 /// Implements `Zeroize` and `ZeroizeOnDrop` so secret bytes are zeroed out when dropped.
 /// Explicitly avoids leaking contents in `Debug` and `Display` formatters.
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct SecretBytes(Vec<u8>);
 
 impl SecretBytes {
@@ -84,9 +84,7 @@ pub enum IpcRequest {
     Lock,
     /// Unlock the vault using a password provided over IPC (e.g. from PAM or prompter).
     /// If the vault is uninitialized, performs zero-touch automated provisioning.
-    UnlockWithPassword {
-        password: String,
-    },
+    UnlockWithPassword { password: String },
     /// Rotate the primary password slot (Slot 0) when the user modifies their OS password.
     RotateSlotPassword {
         old_password: String,
@@ -103,8 +101,8 @@ pub enum IpcRequest {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum IpcResponse {
-    /// Success with raw 32-byte secret payload
-    Secret(Vec<u8>),
+    /// Success with raw 32-byte secret payload protected by ZeroizeOnDrop
+    Secret(SecretBytes),
     /// Current lock state
     LockStatus(LockState),
     /// Operation succeeded without payload

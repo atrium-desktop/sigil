@@ -1,5 +1,5 @@
+use crate::crypto::{derive_app_secret, MasterKey};
 use crate::domain::{LockState, Namespace, Purpose, Result, SecretBytes, SigilError, Subject};
-use crate::crypto::{derive_app_secret, derive_portal_secret, MasterKey};
 use crate::store::{FileVaultStore, StoredCollection, StoredItem, StoredVaultData};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -131,13 +131,14 @@ impl SigilService {
                 );
             }
             // Ensure default login collection always present
-            inner.collections.entry("login".to_string()).or_insert_with(|| {
-                CollectionRecord {
+            inner
+                .collections
+                .entry("login".to_string())
+                .or_insert_with(|| CollectionRecord {
                     id: "login".to_string(),
                     label: "Login".to_string(),
                     items: HashMap::new(),
-                }
-            });
+                });
         }
         inner.master_key = Some(key);
         info!("Credential service successfully unlocked.");
@@ -151,7 +152,9 @@ impl SigilService {
         };
         // Zero-touch automatic provisioning if vault does not exist yet
         let key = if !store.exists() {
-            info!("No existing vault found. Auto-provisioning initial envelope vault with password.");
+            info!(
+                "No existing vault found. Auto-provisioning initial envelope vault with password."
+            );
             store.initialize_with_password(password)?
         } else {
             store.unlock_with_password(password)?
@@ -183,22 +186,14 @@ impl SigilService {
         purpose: &Purpose,
     ) -> Result<SecretBytes> {
         let inner = self.inner.read().await;
-        let master_key = inner
-            .master_key
-            .as_ref()
-            .ok_or(SigilError::Locked)?;
+        let master_key = inner.master_key.as_ref().ok_or(SigilError::Locked)?;
 
-        // Special backward-compatibility handling for Portal Secret v1
-        if namespace.as_str() == "aegis.portal.Secret/v1" || namespace.as_str() == "xdg-portal" {
-            Ok(derive_portal_secret(master_key, subject.as_str()))
-        } else {
-            Ok(derive_app_secret(
-                master_key,
-                namespace.as_str(),
-                subject.as_str(),
-                purpose.as_str(),
-            ))
-        }
+        Ok(derive_app_secret(
+            master_key,
+            namespace.as_str(),
+            subject.as_str(),
+            purpose.as_str(),
+        ))
     }
 
     pub async fn get_collection_ids(&self) -> Vec<String> {
@@ -237,9 +232,7 @@ impl SigilService {
     pub async fn delete_collection(&self, id: &str) -> Result<()> {
         let mut inner = self.inner.write().await;
         if inner.collections.remove(id).is_none() {
-            return Err(SigilError::NotFound(format!(
-                "Collection {id} not found"
-            )));
+            return Err(SigilError::NotFound(format!("Collection {id} not found")));
         }
         self.save_locked(&mut inner)?;
         Ok(())

@@ -106,6 +106,7 @@ fn connect_to_socket(uid: u32, wait: bool) -> Option<UnixStream> {
 
 /// Cleanup callback for stashed authentication token data in PAM handle context.
 /// Cryptographically zeroizes the memory buffer when replaced or freed by PAM.
+#[allow(clippy::ptr_arg)]
 fn cleanup_stashed_authtok(data: &Vec<u8>, _pam: Pam, _flags: i32, _status: PamError) {
     unsafe {
         let ptr = data.as_ptr() as *mut u8;
@@ -168,7 +169,10 @@ fn unlock_via_socket(pamh: &Pam, wait: bool) -> PamError {
         Some(s) => s,
         None => {
             if wait {
-                log_pam(&format!("timed out waiting for native socket for uid {}", uid));
+                log_pam(&format!(
+                    "timed out waiting for native socket for uid {}",
+                    uid
+                ));
             }
             authtok.zeroize();
             return PamError::SUCCESS;
@@ -190,7 +194,10 @@ fn unlock_via_socket(pamh: &Pam, wait: bool) -> PamError {
                     log_pam(&format!("vault credentials desynchronized for uid {}", uid));
                 }
                 other => {
-                    log_pam(&format!("vault unlock response: {:?} for uid {}", other, uid));
+                    log_pam(&format!(
+                        "vault unlock response: {:?} for uid {}",
+                        other, uid
+                    ));
                 }
             }
         }
@@ -225,7 +232,10 @@ fn rekey_via_socket(pamh: &Pam) -> PamError {
     let mut stream = match connect_to_socket(uid, true) {
         Some(s) => s,
         None => {
-            log_pam(&format!("chauthtok: timed out waiting for socket for uid {}", uid));
+            log_pam(&format!(
+                "chauthtok: timed out waiting for socket for uid {}",
+                uid
+            ));
             old_authtok.zeroize();
             new_authtok.zeroize();
             return PamError::SUCCESS;
@@ -242,7 +252,10 @@ fn rekey_via_socket(pamh: &Pam) -> PamError {
 
         if write_request_sync(&mut stream, &req).is_ok() {
             if let Ok(resp) = read_response_sync(&mut stream) {
-                log_pam(&format!("chauthtok: slot rotation result: {:?} for uid {}", resp, uid));
+                log_pam(&format!(
+                    "chauthtok: slot rotation result: {:?} for uid {}",
+                    resp, uid
+                ));
             }
         }
     } else {

@@ -20,8 +20,7 @@ impl SigilClient {
 
     /// Creates a client connecting to the default `$XDG_RUNTIME_DIR/sigil/native.sock`.
     pub fn connect_default() -> Result<Self> {
-        let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR")
-            .ok_or(ClientError::NoRuntimeDir)?;
+        let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").ok_or(ClientError::NoRuntimeDir)?;
         let path = PathBuf::from(runtime_dir).join(DEFAULT_SOCKET_SUBPATH);
         Ok(Self::new(path))
     }
@@ -44,7 +43,10 @@ impl SigilClient {
             IpcResponse::Success => Ok(()),
             IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
             IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
-            other => Err(ClientError::DaemonError(format!("Unexpected response: {:?}", other))),
+            other => Err(ClientError::DaemonError(format!(
+                "Unexpected response: {:?}",
+                other
+            ))),
         }
     }
 
@@ -56,7 +58,10 @@ impl SigilClient {
             IpcResponse::LockStatus(status) => Ok(status),
             IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
             IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
-            other => Err(ClientError::DaemonError(format!("Unexpected response: {:?}", other))),
+            other => Err(ClientError::DaemonError(format!(
+                "Unexpected response: {:?}",
+                other
+            ))),
         }
     }
 
@@ -82,12 +87,15 @@ impl SigilClient {
 
         write_request(&mut stream, &req).await?;
         match read_response(&mut stream).await? {
-            IpcResponse::Secret(bytes) => Ok(SecretBytes::new(bytes)),
+            IpcResponse::Secret(secret) => Ok(secret),
             IpcResponse::Locked => Err(ClientError::Locked),
             IpcResponse::Cancelled => Err(ClientError::Cancelled),
             IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
             IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
-            other => Err(ClientError::DaemonError(format!("Unexpected response: {:?}", other))),
+            other => Err(ClientError::DaemonError(format!(
+                "Unexpected response: {:?}",
+                other
+            ))),
         }
     }
 
@@ -99,7 +107,10 @@ impl SigilClient {
             IpcResponse::Success => Ok(()),
             IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
             IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
-            other => Err(ClientError::DaemonError(format!("Unexpected response: {:?}", other))),
+            other => Err(ClientError::DaemonError(format!(
+                "Unexpected response: {:?}",
+                other
+            ))),
         }
     }
 
@@ -118,7 +129,10 @@ impl SigilClient {
             IpcResponse::Desynced => Err(ClientError::Desynced),
             IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
             IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
-            other => Err(ClientError::DaemonError(format!("Unexpected response: {:?}", other))),
+            other => Err(ClientError::DaemonError(format!(
+                "Unexpected response: {:?}",
+                other
+            ))),
         }
     }
 
@@ -137,7 +151,10 @@ impl SigilClient {
             IpcResponse::Success => Ok(()),
             IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
             IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
-            other => Err(ClientError::DaemonError(format!("Unexpected response: {:?}", other))),
+            other => Err(ClientError::DaemonError(format!(
+                "Unexpected response: {:?}",
+                other
+            ))),
         }
     }
 
@@ -160,7 +177,10 @@ impl SigilClient {
             IpcResponse::Success => Ok(()),
             IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
             IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
-            other => Err(ClientError::DaemonError(format!("Unexpected response: {:?}", other))),
+            other => Err(ClientError::DaemonError(format!(
+                "Unexpected response: {:?}",
+                other
+            ))),
         }
     }
 }

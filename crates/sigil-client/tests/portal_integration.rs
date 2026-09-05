@@ -4,7 +4,8 @@ use std::os::unix::fs::PermissionsExt;
 
 #[tokio::test]
 async fn test_portal_secret_derivation_and_isolation() {
-    let temp_dir = std::env::temp_dir().join(format!("sigil_portal_int_test_{}", std::process::id()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("sigil_portal_int_test_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&temp_dir);
     std::fs::create_dir_all(&temp_dir).unwrap();
     std::fs::set_permissions(&temp_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
@@ -36,21 +37,33 @@ async fn test_portal_secret_derivation_and_isolation() {
 
     // 2. Retrieve secret for Firefox
     let firefox_secret = client
-        .get_application_secret("aegis.portal.Secret/v1", "org.mozilla.Firefox", "master-secret")
+        .get_application_secret(
+            "atrium.portal.Secret/v1",
+            "org.mozilla.Firefox",
+            "master-secret",
+        )
         .await
         .unwrap();
     assert_eq!(firefox_secret.len(), 32);
 
     // 3. Retrieve secret again for Firefox -> must be 100% deterministic
     let firefox_secret_repeat = client
-        .get_application_secret("aegis.portal.Secret/v1", "org.mozilla.Firefox", "master-secret")
+        .get_application_secret(
+            "atrium.portal.Secret/v1",
+            "org.mozilla.Firefox",
+            "master-secret",
+        )
         .await
         .unwrap();
     assert_eq!(firefox_secret.as_slice(), firefox_secret_repeat.as_slice());
 
     // 4. Retrieve secret for Chromium -> must be completely isolated
     let chromium_secret = client
-        .get_application_secret("aegis.portal.Secret/v1", "org.chromium.Chromium", "master-secret")
+        .get_application_secret(
+            "atrium.portal.Secret/v1",
+            "org.chromium.Chromium",
+            "master-secret",
+        )
         .await
         .unwrap();
     assert_eq!(chromium_secret.len(), 32);
@@ -62,7 +75,11 @@ async fn test_portal_secret_derivation_and_isolation() {
 
     // 6. After lock, retrieving secret fails closed with Locked
     let err = client
-        .get_application_secret("aegis.portal.Secret/v1", "org.mozilla.Firefox", "master-secret")
+        .get_application_secret(
+            "atrium.portal.Secret/v1",
+            "org.mozilla.Firefox",
+            "master-secret",
+        )
         .await;
     assert!(matches!(err, Err(ClientError::Locked)));
 

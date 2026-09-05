@@ -99,7 +99,9 @@ async fn handle_connection(mut stream: UnixStream, service: SigilService) -> Res
     loop {
         let req = match read_request(&mut stream).await {
             Ok(r) => r,
-            Err(sigil_ipc::IpcError::Io(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+            Err(sigil_ipc::IpcError::Io(ref e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
                 break;
             }
             Err(e) => return Err(SigilError::InvalidRequest(e.to_string())),
@@ -120,7 +122,9 @@ async fn handle_connection(mut stream: UnixStream, service: SigilService) -> Res
                 password.zeroize();
                 match res {
                     Ok(_) => IpcResponse::Success,
-                    Err(SigilError::AuthenticationRequired(ref msg)) if msg.contains("desynchronized") => {
+                    Err(SigilError::AuthenticationRequired(ref msg))
+                        if msg.contains("desynchronized") =>
+                    {
                         IpcResponse::Desynced
                     }
                     Err(e) => IpcResponse::Error(e.to_string()),
@@ -165,7 +169,7 @@ async fn handle_connection(mut stream: UnixStream, service: SigilService) -> Res
                     )
                     .await
                 {
-                    Ok(secret) => IpcResponse::Secret(secret.as_slice().to_vec()),
+                    Ok(secret) => IpcResponse::Secret(secret),
                     Err(SigilError::Locked) => IpcResponse::Locked,
                     Err(e) => IpcResponse::Error(e.to_string()),
                 }

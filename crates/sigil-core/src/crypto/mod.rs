@@ -9,7 +9,7 @@ pub use dh::{
     decrypt_secret_service_aes128, encrypt_secret_service_aes128, DhSession, DH_GENERATOR,
     DH_PRIME_HEX,
 };
-pub use hkdf::{derive_app_secret, derive_portal_secret};
+pub use hkdf::derive_app_secret;
 pub use kdf::{
     decode_kdf, derive_key_argon2id, encode_kdf, generate_salt, KdfConfig, KdfParams,
     DEFAULT_SALT_LEN, KDF_FILE_VERSION, KDF_NAME,

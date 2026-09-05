@@ -1,5 +1,5 @@
-use crate::key::MasterKey;
 use crate::domain::SecretBytes;
+use crate::key::MasterKey;
 use hkdf::Hkdf;
 use sha2::Sha256;
 
@@ -27,23 +27,6 @@ pub fn derive_app_secret(
     let mut okm = [0u8; 32];
     hk.expand(&info, &mut okm)
         .expect("32 bytes is well within 255 * 32 bytes expansion limit");
-
-    SecretBytes::new(okm.to_vec())
-}
-
-/// Compatibility derivation for XDG Desktop Portal Secret v1:
-/// PRK = MasterKey
-/// Info = "aegis.portal.Secret/v1\0" || app_id
-pub fn derive_portal_secret(master_key: &MasterKey, app_id: &str) -> SecretBytes {
-    let mut info = b"aegis.portal.Secret/v1\0".to_vec();
-    info.extend_from_slice(app_id.as_bytes());
-
-    let hk = Hkdf::<Sha256>::from_prk(master_key.as_bytes())
-        .expect("MasterKey length is 32 bytes");
-
-    let mut okm = [0u8; 32];
-    hk.expand(&info, &mut okm)
-        .expect("32 bytes output");
 
     SecretBytes::new(okm.to_vec())
 }

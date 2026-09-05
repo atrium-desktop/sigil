@@ -41,40 +41,64 @@ systemctl --user enable sigil.socket
 
 ---
 
-## PAM Stack Integration
+## PAM Phase Architecture & Module Placement
 
-To enable transparent first-login provisioning, screen unlock, and password change cascade synchronization, add `pam_sigil.so` to your PAM stacks.
+`pam_sigil.so` integrates into three distinct PAM facilities (`auth`, `session`, `password`), each fulfilling an explicit lifecycle role. Understanding each phase guarantees zero-race, leak-free execution:
 
-### 1. Login Stack (`/etc/pam.d/system-login` or `/etc/pam.d/login`)
+| PAM Phase | Hook Function | Where to Configure | Purpose & Mechanism |
+| :--- | :--- | :--- | :--- |
+| **`auth`** | `pam_sm_authenticate` / `pam_sm_setcred` | `/etc/pam.d/system-login`, `/etc/pam.d/greetd`, Screen Lockers | **1. Login Managers**: Stashes authenticated password into PAM handle context with cryptographic zeroization callbacks (0ms fast probe skips if socket is unmounted).<br>**2. Screen Lockers**: Direct fast-path unlock while compositor is paused. |
+| **`session`** | `pam_sm_open_session` / `pam_sm_close_session` | `/etc/pam.d/system-login`, `/etc/pam.d/greetd` (**must follow `pam_systemd.so`**) | **Cold-Boot Unlock**: Retrieves stashed password, connects to native socket over exponential backoff, wakes `sigil.service` via socket activation, and **immediately wipes** stashed memory via `wipe_stashed_password`. |
+| **`password`** | `pam_sm_chauthtok` | `/etc/pam.d/system-login`, `/etc/pam.d/passwd` | **Slot Rekeying**: Intercepts password changes, sends `RotateSlotPassword` IPC, and atomically re-wraps Slot 0 with the new Argon2id key. |
+| **`account`** | *None* | *Do not include* | Not applicable. `sigil` does not enforce account access expiration. |
 
-```pam
-# 1. Standard authentication
-auth       sufficient   pam_unix.so try_first_pass nullok
-auth       required     pam_deny.so
+---
 
-# 2. Account verification
-account    required     pam_unix.so
+## Production Configuration Recipes
 
-# 3. Password changes (synchronizes Slot 0)
-password   sufficient   pam_unix.so sha512 shadow try_first_pass use_authtok
-password   optional     pam_sigil.so
+### 1. Display Manager / Login Stack (`/etc/pam.d/greetd` or `/etc/pam.d/system-login`)
 
-# 4. Session management (must be after pam_systemd creates /run/user/<uid>)
-session    required     pam_systemd.so
-session    optional     pam_sigil.so
-```
-
-### 2. Screen Locker Stack (`/etc/pam.d/tessera-lock`, `/etc/pam.d/swaylock`, or `/etc/pam.d/hyprlock`)
+When configuring a display manager such as **Greetd**, ensure `pam_sigil.so` is present in `auth`, `session`, and `password`:
 
 ```pam
 #%PAM-1.0
+
+# 1. Authentication
+# Capture the authenticated password into PAM handle context
+auth       [success=1 default=ignore]  pam_unix.so try_first_pass nullok
+auth       default=die                 pam_deny.so
+auth       optional                    pam_sigil.so
+
+# 2. Account verification
+account    required                    pam_unix.so
+
+# 3. Password synchronization (propagates `passwd` changes to Slot 0)
+password   sufficient                  pam_unix.so sha512 shadow try_first_pass use_authtok
+password   optional                    pam_sigil.so
+
+# 4. Session management
+# CRITICAL: pam_sigil.so MUST be placed AFTER pam_systemd.so so that
+# /run/user/<uid> and sigil.socket are already established!
+session    required                    pam_systemd.so
+session    optional                    pam_sigil.so
+```
+
+> [!IMPORTANT]
+> In the `session` group, `pam_sigil.so` **must follow `pam_systemd.so`**. `pam_systemd` is responsible for mounting `/run/user/<uid>` and instantiating the user systemd manager. Placing `pam_sigil.so` before it will cause the socket connection to fail.
+
+### 2. Screen Locker Stack (`/etc/pam.d/tessera-lock`, `/etc/pam.d/swaylock`, or `/etc/pam.d/hyprlock`)
+
+Screen lockers unlock an active desktop session where the daemon and socket are already running in memory:
+
+```pam
+#%PAM-1.0
+# Fast-path: authenticate triggers pam_sigil.so which unlocks native.sock immediately
 auth       sufficient   pam_unix.so try_first_pass
 auth       optional     pam_sigil.so
 account    include      system-login
-session    optional     pam_sigil.so
 ```
 
-When you unlock your screen, PAM transmits the verified password over `/run/user/<uid>/sigil/native.sock` in memory. `sigil` unwraps the `VolumeKey` and restores unlocked operation before the compositor unlocks the display.
+When you enter your password to dismiss the screen lock, `pam_sigil.so` transmits the verified token directly across `/run/user/<uid>/sigil/native.sock` in volatile memory before the compositor reveals the desktop.
 
 ---
 

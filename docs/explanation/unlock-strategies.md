@@ -35,10 +35,10 @@ sigil auto-initializes Slot 0    sigil restores VolumeKey in RAM sigil immediate
 
 ### 1. First-Login Zero-Touch Provisioning
 When a user logs into a freshly installed desktop (or a newly created user account):
-1. The user authenticates at the display manager (Greetd / TTY).
-2. `pam_systemd` establishes the user runtime environment (`/run/user/<uid>`).
-3. `pam_sigil.so` connects to the native socket `/run/user/<uid>/sigil/native.sock`.
-4. `systemd.socket` activates `sigil.service` on-demand.
+1. The user authenticates at the display manager (Greetd / TTY) where `pam_sigil.so` hooks `auth` to stash credentials with zeroization protection.
+2. `pam_systemd` establishes the user runtime environment (`/run/user/<uid>`) and binds `sigil.socket`.
+3. `pam_sigil.so` executes in `open_session`, connects to `/run/user/<uid>/sigil/native.sock` via exponential backoff, and immediately wipes stashed memory.
+4. `systemd.socket` activates `sigil.service` on-demand with socket fd 3 adoption.
 5. The daemon detects that no vault exists (`LockState::Uninitialized`):
    - Generates a 256-bit CSPRNG `VolumeKey`.
    - Initializes an empty encrypted `vault.data`.

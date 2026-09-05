@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-09-08
+
+### Fixed
+- **Systemd Namespacing Cold-Boot Bootstrapping**: Relaxed `ReadWritePaths` in `sigil.service` to `%h/.local/share` to prevent mount namespace setup failures (`status=226/NAMESPACE`) on pristine systems where `~/.local/share/sigil` does not exist yet.
+- **Freedesktop Secret Service Spec Compliance**: Registered `/org/freedesktop/secrets/aliases/default` to fully support standard libsecret / `secret-tool` default collection invocations without requiring explicit collection paths.
+- **Prompter IPC Frame Protocol Alignment**: Fixed `sigil-prompter` socket communication to send length-prefixed `IpcRequest::UnlockWithPassword` frames conforming to `NativeIpcServer`.
+
 ## [1.3.0] - 2026-09-08
 
 ### Architecture & Lifecycle (ADR-0002)
@@ -13,11 +20,6 @@ All notable changes to this project will be documented in this file.
 - **Purged CLI & Keyfile Compromises**: Completely removed `sigil-cli` and unencrypted `vault.key` keyfile compromises. Standard desktop operations now standardize on `secret-tool` and `busctl`.
 - **Domain Renaming**: Renamed `sigil-core` to `sigil-domain` to strictly reflect domain entities, value objects, and error models under DDD best practices.
 - **Hardening Enhancements**: Integrated POSIX thread-safe `getpwnam_r` in `sigil-pam` and kernel `mlockall(MCL_CURRENT | MCL_FUTURE)` memory anti-paging in daemon startup.
-
-### Fixed
-- **Systemd Namespacing Cold-Boot Bootstrapping**: Relaxed `ReadWritePaths` in `sigil.service` to `%h/.local/share` to prevent mount namespace setup failures (`status=226/NAMESPACE`) on pristine systems where `~/.local/share/sigil` does not exist yet.
-- **Freedesktop Secret Service Spec Compliance**: Registered `/org/freedesktop/secrets/aliases/default` to fully support standard libsecret / `secret-tool` default collection invocations without requiring explicit collection paths.
-- **Prompter IPC Frame Protocol Alignment**: Fixed `sigil-prompter` socket communication to send length-prefixed `IpcRequest::UnlockWithPassword` frames conforming to `NativeIpcServer`.
 
 ## [1.2.2] - 2026-09-05
 

@@ -44,7 +44,7 @@ Under the modern zero-friction envelope architecture (ADR-0002), `sigil` operate
 ```bash
 # Maintainer: Atrium Desktop Team <dev@atrium-desktop.org>
 pkgname=sigil
-pkgver=1.3.0
+pkgver=1.3.1
 pkgrel=1
 pkgdesc="Industrial-grade, zero-friction Freedesktop Secret Service infrastructure daemon"
 arch=('x86_64' 'aarch64')
@@ -105,7 +105,7 @@ package() {
 
 ```spec
 Name:           sigil
-Version:        1.3.0
+Version:        1.3.1
 Release:        1%{?dist}
 Summary:        Industrial-grade, zero-friction Freedesktop Secret Service daemon
 

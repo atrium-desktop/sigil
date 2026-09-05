@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.5] - 2026-09-08
+
+### Documentation & Architecture
+- **Exhaustive PAM Lifecycle Documentation**: Added full phase-by-phase architectural specifications and production configurations for `auth`, `session`, and `password` stages across display managers (Greetd) and screen lockers.
+- **Password Synchronization Specification**: Documented the role of `pam_sm_chauthtok` in cascading `passwd` updates to Slot 0 to prevent vault credential desynchronization.
+
 ## [1.3.4] - 2026-09-08
 
 ### Fixed & Hardened (Uncompromised Best Practice)

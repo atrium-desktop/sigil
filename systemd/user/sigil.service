@@ -28,8 +28,8 @@ UMask=0077
 
 # Allow writing to XDG_RUNTIME_DIR for the IPC socket
 ReadWritePaths=%t
-# Allow writing to the data directory for the vault
-ReadWritePaths=%h/.local/share/sigil
+# Allow writing to the data directory for the vault (and ensure ~/.local/share allows directory creation)
+ReadWritePaths=%h/.local/share
 
 # Ensure GUI environment is available for the prompter
 PassEnvironment=WAYLAND_DISPLAY DISPLAY XDG_RUNTIME_DIR XDG_SESSION_ID

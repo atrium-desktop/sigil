@@ -30,6 +30,7 @@ busctl --user status org.freedesktop.secrets
 You should see `sigil` actively serving the object paths:
 - `/org/freedesktop/secrets`
 - `/org/freedesktop/secrets/collection/login`
+- `/org/freedesktop/secrets/aliases/default`
 - `/org/freedesktop/secrets/prompt/default`
 
 ---

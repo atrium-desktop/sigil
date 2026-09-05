@@ -118,7 +118,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .name("org.freedesktop.secrets")?
         .serve_at("/org/freedesktop/secrets", secret_service)?
         .serve_at("/org/freedesktop/secrets/prompt/default", prompt)?
-        .serve_at("/org/freedesktop/secrets/collection/login", default_login_col)?
+        .serve_at("/org/freedesktop/secrets/collection/login", default_login_col.clone())?
+        .serve_at("/org/freedesktop/secrets/aliases/default", default_login_col)?
         .build()
         .await?;
 

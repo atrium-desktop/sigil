@@ -65,12 +65,12 @@ sudo install -m 0755 target/release/sigil /usr/bin/
 sudo install -m 0755 target/release/sigil-prompter /usr/bin/
 sudo install -m 0755 target/release/libpam_sigil.so /usr/lib/security/pam_sigil.so
 
-# Install systemd user units
-mkdir -p ~/.config/systemd/user/
-cp systemd/user/sigil.service ~/.config/systemd/user/
-cp systemd/user/sigil.socket ~/.config/systemd/user/
+# Install systemd user units (system-wide for all users)
+sudo install -m 0644 systemd/user/sigil.service /usr/lib/systemd/user/
+sudo install -m 0644 systemd/user/sigil.socket /usr/lib/systemd/user/
+sudo install -m 0644 dbus/org.freedesktop.secrets.service /usr/share/dbus-1/services/
 
-# Enable socket activation
+# Enable socket activation in user session
 systemctl --user daemon-reload
 systemctl --user enable --now sigil.socket
 ```

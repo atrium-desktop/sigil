@@ -1,5 +1,5 @@
 use crate::collection::Collection;
-use crate::item::SecretStruct;
+use crate::item::{Item, SecretStruct};
 use crate::session::{Session, SessionAlgorithm};
 use sigil_crypto::DhSession;
 use sigil_service::SigilService;
@@ -99,8 +99,14 @@ impl SecretServiceDbus {
         &self,
         #[zbus(connection)] conn: &zbus::Connection,
         properties: HashMap<String, Value<'_>>,
-        _alias: &str,
+        alias: &str,
     ) -> zbus::fdo::Result<(OwnedObjectPath, OwnedObjectPath)> {
+        if alias == "default" {
+            let col_path = OwnedObjectPath::try_from("/org/freedesktop/secrets/collection/login").unwrap();
+            let prompt_path = OwnedObjectPath::try_from("/").unwrap();
+            return Ok((col_path, prompt_path));
+        }
+
         let label = properties
             .get("org.freedesktop.Secret.Collection.Label")
             .and_then(|v| match v {
@@ -127,7 +133,15 @@ impl SecretServiceDbus {
             sessions: self.sessions.clone(),
         };
 
-        let _ = conn.object_server().at(&col_path, col_obj).await;
+        let _ = conn.object_server().at(&col_path, col_obj.clone()).await;
+
+        if !alias.is_empty() {
+            if let Ok(alias_path) = OwnedObjectPath::try_from(format!(
+                "/org/freedesktop/secrets/aliases/{alias}"
+            )) {
+                let _ = conn.object_server().at(&alias_path, col_obj).await;
+            }
+        }
 
         let prompt_path = OwnedObjectPath::try_from("/").unwrap();
         Ok((col_path, prompt_path))
@@ -135,6 +149,7 @@ impl SecretServiceDbus {
 
     async fn search_items(
         &self,
+        #[zbus(connection)] conn: &zbus::Connection,
         attributes: HashMap<String, String>,
     ) -> zbus::fdo::Result<(Vec<OwnedObjectPath>, Vec<OwnedObjectPath>)> {
         let is_locked = self.service.is_locked().await;
@@ -153,6 +168,13 @@ impl SecretServiceDbus {
             if let Ok(p) = OwnedObjectPath::try_from(format!(
                 "/org/freedesktop/secrets/collection/{col_id}/{item_id}"
             )) {
+                let item_obj = Item {
+                    collection_id: col_id,
+                    item_id,
+                    service: self.service.clone(),
+                    sessions: self.sessions.clone(),
+                };
+                let _ = conn.object_server().at(&p, item_obj).await;
                 unlocked.push(p);
             }
         }
@@ -243,5 +265,30 @@ impl SecretServiceDbus {
             }
         }
         Ok(paths)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sigil_store::FileVaultStore;
+
+    #[tokio::test]
+    async fn test_default_alias_resolution() {
+        let temp_dir = std::env::temp_dir().join(format!("sigil_alias_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let store = FileVaultStore::new(temp_dir.clone());
+        let service = SigilService::new(store);
+        let secret_service = SecretServiceDbus::new(service);
+
+        let default_alias = secret_service.read_alias("default").await.unwrap();
+        assert_eq!(default_alias.as_str(), "/org/freedesktop/secrets/collection/login");
+
+        let unknown_alias = secret_service.read_alias("custom").await.unwrap();
+        assert_eq!(unknown_alias.as_str(), "/");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

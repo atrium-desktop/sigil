@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 use zbus::interface;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, Value};
 
+#[derive(Clone)]
 pub struct Collection {
     pub id: String,
     pub service: SigilService,
@@ -26,6 +27,7 @@ impl Collection {
 
     async fn search_items(
         &self,
+        #[zbus(connection)] conn: &zbus::Connection,
         attributes: HashMap<String, String>,
     ) -> zbus::fdo::Result<Vec<OwnedObjectPath>> {
         let matches = self
@@ -39,6 +41,13 @@ impl Collection {
             if let Ok(p) = OwnedObjectPath::try_from(format!(
                 "/org/freedesktop/secrets/collection/{col_id}/{item_id}"
             )) {
+                let item_obj = Item {
+                    collection_id: col_id,
+                    item_id,
+                    service: self.service.clone(),
+                    sessions: self.sessions.clone(),
+                };
+                let _ = conn.object_server().at(&p, item_obj).await;
                 paths.push(p);
             }
         }

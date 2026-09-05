@@ -17,3 +17,6 @@ zeroize = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+sigil-store = { path = "../sigil-store" }

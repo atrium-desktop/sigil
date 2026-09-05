@@ -1,10 +1,6 @@
-use std::io::Write;
-use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
-
 use iris::{Application, Config};
 use lens::{Frame, Input, TextBuf};
-use sigil_ipc::PromptResponse;
+use sigil_ipc::{write_request_sync, IpcRequest};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args()
@@ -122,25 +118,21 @@ impl PrompterState {
 
 fn send_password(password: String) {
     let socket_path = if let Ok(path) = std::env::var("SIGIL_SOCKET_PATH") {
-        PathBuf::from(path)
+        std::path::PathBuf::from(path)
     } else {
         let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
-        let candidate = PathBuf::from(&runtime_dir).join("sigil/native.sock");
+        let candidate = std::path::PathBuf::from(&runtime_dir).join("sigil/native.sock");
         if candidate.exists() {
             candidate
         } else {
-            PathBuf::from(runtime_dir).join("sigil.sock")
+            std::path::PathBuf::from(runtime_dir).join("sigil.sock")
         }
     };
 
-    match UnixStream::connect(&socket_path) {
+    match std::os::unix::net::UnixStream::connect(&socket_path) {
         Ok(mut stream) => {
-            let response = PromptResponse {
-                password: Some(password),
-            };
-            if let Ok(serialized) = serde_json::to_vec(&response) {
-                let _ = stream.write_all(&serialized);
-            }
+            let req = IpcRequest::UnlockWithPassword { password };
+            let _ = write_request_sync(&mut stream, &req);
         }
         Err(e) => eprintln!("Failed to connect to daemon socket at {:?}: {}", socket_path, e),
     }

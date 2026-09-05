@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.6] - 2026-09-08
+
+### Security & Architecture (ADR-0003)
+- **Canonical HKDF-SHA256 Derivation**: Retired legacy `derive_portal_secret` and ad-hoc namespace workarounds; all application and portal secrets are now strictly derived via `derive_app_secret` under canonical namespace `atrium.portal.Secret/v1`.
+- **End-to-End Memory Zeroization**: Implemented `Serialize` and `Deserialize` on `SecretBytes` with compiler-guaranteed `Zeroize` and `ZeroizeOnDrop`, directly wrapping IPC secret payloads to eliminate transient heap copies.
+- **Client & Integration Alignment**: Aligned portal secret integration tests and client handling to canonical standards.
+
 ## [1.3.5] - 2026-09-08
 
 ### Documentation & Architecture

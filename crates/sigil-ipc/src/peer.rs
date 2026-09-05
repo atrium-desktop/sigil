@@ -29,9 +29,13 @@ pub fn check_peer_credentials<S: AsRawFd>(stream: &S) -> IpcResult<()> {
     }
 
     let my_uid = unsafe { libc::getuid() };
-    if ucred.uid != my_uid {
+    // Allowed peer credentials:
+    // 1. Same user (ucred.uid == my_uid): Standard intra-user IPC.
+    // 2. Root (ucred.uid == 0): Display managers, login, and PAM modules (greetd, sddm, login)
+    //    executing pam_sigil on behalf of the user during session lifecycle events.
+    if ucred.uid != my_uid && ucred.uid != 0 {
         return Err(IpcError::AccessDenied(format!(
-            "Peer UID {} does not match daemon UID {}",
+            "Peer UID {} does not match daemon UID {} (and is not root)",
             ucred.uid, my_uid
         )));
     }

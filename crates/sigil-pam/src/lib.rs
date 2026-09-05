@@ -63,16 +63,30 @@ fn log_pam(msg: &str) {
     }
 }
 
-/// Connects to the user's sigil native socket. If `wait` is true, polls with backoff
-/// to accommodate user session socket creation during cold boot or first login.
+/// Connects to the user's sigil native socket. If `wait` is true, polls with responsive
+/// backoff to accommodate user session socket creation during cold boot or first login.
 fn connect_to_socket(uid: u32, wait: bool) -> Option<UnixStream> {
     let socket_path = PathBuf::from(format!("/run/user/{}/sigil/native.sock", uid));
-    let timeout = if wait {
-        Duration::from_millis(2500)
-    } else {
-        Duration::ZERO
-    };
+
+    // Fast path: Screen locker or already active session.
+    // Zero delay, single non-blocking check.
+    if !wait {
+        if socket_path.exists() {
+            if let Ok(stream) = UnixStream::connect(&socket_path) {
+                let _ = stream.set_read_timeout(Some(Duration::from_millis(3000)));
+                let _ = stream.set_write_timeout(Some(Duration::from_millis(3000)));
+                return Some(stream);
+            }
+        }
+        return None;
+    }
+
+    // Polling path: Cold boot / first login during open_session.
+    // Starts with immediate probe, then fast backoff (2ms, 5ms, 10ms, 25ms, max 50ms).
+    // Total timeout ceiling is strictly capped at 1000ms to preserve login responsiveness.
+    let timeout = Duration::from_millis(1000);
     let start = std::time::Instant::now();
+    let mut sleep_ms = 2;
 
     loop {
         if socket_path.exists() {
@@ -85,7 +99,17 @@ fn connect_to_socket(uid: u32, wait: bool) -> Option<UnixStream> {
         if start.elapsed() >= timeout {
             return None;
         }
-        std::thread::sleep(Duration::from_millis(25));
+        std::thread::sleep(Duration::from_millis(sleep_ms));
+        sleep_ms = std::cmp::min(sleep_ms * 2, 50);
+    }
+}
+
+/// Cleanup callback for stashed authentication token data in PAM handle context.
+/// Cryptographically zeroizes the memory buffer when replaced or freed by PAM.
+fn cleanup_stashed_authtok(data: &Vec<u8>, _pam: Pam, _flags: i32, _status: PamError) {
+    unsafe {
+        let ptr = data.as_ptr() as *mut u8;
+        std::ptr::write_bytes(ptr, 0, data.len());
     }
 }
 
@@ -95,8 +119,13 @@ fn connect_to_socket(uid: u32, wait: bool) -> Option<UnixStream> {
 fn stash_password_if_present(pamh: &Pam) {
     if let Ok(Some(tok)) = pamh.get_cached_authtok() {
         let bytes = tok.to_bytes_with_nul().to_vec();
-        let _ = pamh.send_bytes("sigil_authtok", bytes, None);
+        let _ = pamh.send_bytes("sigil_authtok", bytes, Some(cleanup_stashed_authtok));
     }
+}
+
+/// Explicitly wipes and frees the stashed password from PAM handle context immediately after use.
+fn wipe_stashed_password(pamh: &Pam) {
+    let _ = pamh.send_bytes("sigil_authtok", Vec::new(), None);
 }
 
 /// Retrieves the plaintext authentication token either directly from PAM cached authtok
@@ -108,12 +137,15 @@ fn get_target_password(pamh: &Pam) -> Option<String> {
             return Some(s);
         }
     }
-    if let Ok(bytes) = pamh.retrieve_bytes("sigil_authtok") {
+    if let Ok(mut bytes) = pamh.retrieve_bytes("sigil_authtok") {
         if let Ok(cstr) = CStr::from_bytes_until_nul(&bytes) {
             let s = cstr.to_string_lossy().into_owned();
+            bytes.zeroize();
             if !s.is_empty() {
                 return Some(s);
             }
+        } else {
+            bytes.zeroize();
         }
     }
     None
@@ -244,10 +276,13 @@ impl PamServiceModule for SigilPam {
     fn open_session(pamh: Pam, _flags: PamFlag, _args: Vec<String>) -> PamError {
         // Cold-boot login: pam_systemd has just set up /run/user/<uid>, wait for socket activation
         unlock_via_socket(&pamh, true);
+        // Best practice: Immediately destroy stashed authtok in PAM handle to minimize plaintext exposure
+        wipe_stashed_password(&pamh);
         PamError::SUCCESS
     }
 
-    fn close_session(_pamh: Pam, _flags: PamFlag, _args: Vec<String>) -> PamError {
+    fn close_session(pamh: Pam, _flags: PamFlag, _args: Vec<String>) -> PamError {
+        wipe_stashed_password(&pamh);
         PamError::SUCCESS
     }
 

@@ -36,4 +36,11 @@ mod tests {
         let decoded = read_response(&mut cursor).await.unwrap();
         assert!(matches!(decoded, IpcResponse::Success));
     }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_peer_credentials_self() {
+        let (s1, _s2) = std::os::unix::net::UnixStream::pair().unwrap();
+        assert!(check_peer_credentials(&s1).is_ok());
+    }
 }

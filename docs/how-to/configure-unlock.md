@@ -82,7 +82,8 @@ When you unlock your screen, PAM transmits the verified password over `/run/user
 
 `pam_sigil.so` enforces industrial isolation:
 - **System Accounts Bypassed**: Accounts with `UID < 1000` or `UID == 65534` (e.g. `systemd-coredump`, `cron`, `nobody`) are skipped immediately without socket access.
-- **Kernel UID Equality**: Every IPC connection is verified via `SO_PEERCRED`. Cross-user access is impossible.
+- **Kernel UID Isolation & PAM Authorization**: Every IPC connection is verified via `SO_PEERCRED`. Only the target user (`ucred.uid == my_uid`) and authorized system login hosts (root / UID 0 executing PAM) can access the native socket; cross-user access is strictly denied.
+- **Transient Memory Zeroization**: PAM stashed credentials carry cryptographic memory zeroization callbacks and are immediately wiped after `open_session`.
 - **Session Eviction**: When a user switches seats or locks the workstation, `sigil` intercepts logind's `Lock` and `Active=false` properties and immediately zeroes out `VolumeKey` and all cached decrypted secrets in RAM.
 
 ---

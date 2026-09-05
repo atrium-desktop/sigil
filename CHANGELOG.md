@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.4] - 2026-09-08
+
+### Fixed & Hardened (Uncompromised Best Practice)
+- **PAM Peer Credentials Authorization**: Explicitly authorized root (UID 0) in `sigil-ipc`'s `check_peer_credentials`, resolving the critical access denied blocker when display managers (`greetd`, `sddm`, `login`) execute `pam_sigil.so` during session setup.
+- **PAM Transient Memory Zeroization**: Implemented cryptographic memory zeroization cleanup callbacks for stashed tokens and added explicit `wipe_stashed_password` calls upon session open and close.
+- **Responsive Socket Backoff**: Replaced static 2.5s PAM polling with sub-millisecond exponential backoff and a 1.0s ceiling, preserving login responsiveness.
+- **Systemd User Service Sandboxing Refinement**: Removed unsupported kernel-level namespace restrictions from unprivileged `sigil.service` to ensure flawless startup across all distributions, while adding strict dependencies on `sigil.socket` and `dbus.socket`.
+
 ## [1.3.3] - 2026-09-08
 
 ### Added & Improved

@@ -24,7 +24,7 @@ pub enum ClientError {
     DaemonError(String),
 
     #[error("Protocol / framing error: {0}")]
-    Protocol(#[from] sigil_domain::SigilError),
+    Protocol(#[from] sigil_ipc::IpcError),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

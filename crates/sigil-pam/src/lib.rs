@@ -178,10 +178,7 @@ impl PamServiceModule for SigilPam {
         PamError::SUCCESS
     }
 
-    fn chauthtok(pamh: Pam, flags: PamFlag, _args: Vec<String>) -> PamError {
-        match flags {
-            _ => {}
-        }
+    fn chauthtok(pamh: Pam, _flags: PamFlag, _args: Vec<String>) -> PamError {
         rekey_via_socket(&pamh);
         PamError::SUCCESS
     }

@@ -1,8 +1,6 @@
 use directories::ProjectDirs;
-use sigil_ipc::NativeIpcServer;
+use sigil_core::{ensure_secure_dir, FileVaultStore, NativeIpcServer, SigilService};
 use sigil_secret_service::{Collection, Prompt, SecretServiceDbus};
-use sigil_service::SigilService;
-use sigil_store::{ensure_secure_dir, FileVaultStore};
 use std::error::Error;
 use std::path::PathBuf;
 use tracing::{error, info, warn};

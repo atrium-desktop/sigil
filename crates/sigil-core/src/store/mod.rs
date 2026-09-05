@@ -10,7 +10,7 @@ pub use model::{StoredCollection, StoredItem, StoredVaultData, VaultMeta, CURREN
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sigil_crypto::MasterKey;
+    use crate::crypto::MasterKey;
     use std::collections::HashMap;
 
     #[test]

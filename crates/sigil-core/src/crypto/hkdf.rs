@@ -1,5 +1,5 @@
 use crate::key::MasterKey;
-use sigil_domain::SecretBytes;
+use crate::domain::SecretBytes;
 use hkdf::Hkdf;
 use sha2::Sha256;
 

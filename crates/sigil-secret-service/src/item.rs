@@ -1,5 +1,5 @@
 use crate::session::Session;
-use sigil_service::SigilService;
+use sigil_core::SigilService;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

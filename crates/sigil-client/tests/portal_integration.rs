@@ -1,8 +1,5 @@
 use sigil_client::{ClientError, SigilClient};
-use sigil_crypto::MasterKey;
-use sigil_ipc::NativeIpcServer;
-use sigil_service::SigilService;
-use sigil_store::FileVaultStore;
+use sigil_core::{FileVaultStore, MasterKey, NativeIpcServer, SigilService};
 use std::os::unix::fs::PermissionsExt;
 
 #[tokio::test]

@@ -1,6 +1,5 @@
 use crate::error::{ClientError, Result};
-use sigil_domain::{LockState, SecretBytes};
-use sigil_ipc::{read_response, write_request, IpcRequest, IpcResponse};
+use sigil_ipc::{read_response, write_request, IpcRequest, IpcResponse, LockState, SecretBytes};
 use std::path::{Path, PathBuf};
 use tokio::net::UnixStream;
 

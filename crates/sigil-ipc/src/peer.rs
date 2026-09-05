@@ -1,10 +1,9 @@
-use sigil_domain::{Result, SigilError};
+use crate::error::{IpcError, IpcResult};
 use std::os::unix::io::AsRawFd;
-use tokio::net::UnixStream;
 
 /// Checks that the peer connected to the Unix socket belongs to the same UID.
 #[cfg(target_os = "linux")]
-pub fn check_peer_credentials(stream: &UnixStream) -> Result<()> {
+pub fn check_peer_credentials<S: AsRawFd>(stream: &S) -> IpcResult<()> {
     let fd = stream.as_raw_fd();
     let mut ucred = libc::ucred {
         pid: 0,
@@ -24,14 +23,14 @@ pub fn check_peer_credentials(stream: &UnixStream) -> Result<()> {
     };
 
     if res != 0 {
-        return Err(SigilError::AccessDenied(
+        return Err(IpcError::AccessDenied(
             "Failed to retrieve SO_PEERCRED from socket".into(),
         ));
     }
 
     let my_uid = unsafe { libc::getuid() };
     if ucred.uid != my_uid {
-        return Err(SigilError::AccessDenied(format!(
+        return Err(IpcError::AccessDenied(format!(
             "Peer UID {} does not match daemon UID {}",
             ucred.uid, my_uid
         )));
@@ -41,6 +40,6 @@ pub fn check_peer_credentials(stream: &UnixStream) -> Result<()> {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn check_peer_credentials(_stream: &UnixStream) -> Result<()> {
+pub fn check_peer_credentials<S: AsRawFd>(_stream: &S) -> IpcResult<()> {
     Ok(())
 }

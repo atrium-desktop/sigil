@@ -5,9 +5,9 @@ pub use state::{CollectionRecord, SigilService, ItemRecord};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sigil_domain::{Namespace, Purpose, Subject};
-    use sigil_crypto::MasterKey;
-    use sigil_store::FileVaultStore;
+    use crate::domain::{LockState, Namespace, Purpose, Subject};
+    use crate::crypto::MasterKey;
+    use crate::store::FileVaultStore;
     use std::collections::HashMap;
 
     #[tokio::test]
@@ -89,11 +89,11 @@ mod tests {
         let store = FileVaultStore::new(temp_dir.clone());
         let service = SigilService::new(store.clone());
 
-        assert_eq!(service.lock_state().await, sigil_domain::LockState::Uninitialized);
+        assert_eq!(service.lock_state().await, LockState::Uninitialized);
 
         // Auto-provision via unlock_with_password
         service.unlock_with_password("my-initial-pwd").await.unwrap();
-        assert_eq!(service.lock_state().await, sigil_domain::LockState::Unlocked);
+        assert_eq!(service.lock_state().await, LockState::Unlocked);
 
         // Store an item and save
         service
@@ -111,7 +111,7 @@ mod tests {
 
         // Lock
         service.lock().await.unwrap();
-        assert_eq!(service.lock_state().await, sigil_domain::LockState::Locked);
+        assert_eq!(service.lock_state().await, LockState::Locked);
 
         // Rotate password
         service.rotate_password("my-initial-pwd", "my-new-pwd").await.unwrap();
@@ -121,18 +121,18 @@ mod tests {
 
         // New password unlocks
         service.unlock_with_password("my-new-pwd").await.unwrap();
-        assert_eq!(service.lock_state().await, sigil_domain::LockState::Unlocked);
+        assert_eq!(service.lock_state().await, LockState::Unlocked);
         let item = service.get_item("login", "vault-secret").await.unwrap();
         assert_eq!(item.secret, b"confidential-data");
 
         // Simulate desync
         service.lock().await.unwrap();
         store.mark_desynced(true).unwrap();
-        assert_eq!(service.lock_state().await, sigil_domain::LockState::Desynced);
+        assert_eq!(service.lock_state().await, LockState::Desynced);
 
         // Recover and sync with new session password
         service.recover_and_sync("my-new-pwd", "recovered-pwd").await.unwrap();
-        assert_eq!(service.lock_state().await, sigil_domain::LockState::Unlocked);
+        assert_eq!(service.lock_state().await, LockState::Unlocked);
         assert!(!store.is_desynced());
 
         let _ = std::fs::remove_dir_all(&temp_dir);

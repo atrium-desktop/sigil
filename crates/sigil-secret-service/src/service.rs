@@ -1,8 +1,7 @@
 use crate::collection::Collection;
 use crate::item::{Item, SecretStruct};
 use crate::session::{Session, SessionAlgorithm};
-use sigil_crypto::DhSession;
-use sigil_service::SigilService;
+use sigil_core::{DhSession, SigilService};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use std::collections::HashMap;
@@ -271,7 +270,7 @@ impl SecretServiceDbus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sigil_store::FileVaultStore;
+    use sigil_core::FileVaultStore;
 
     #[tokio::test]
     async fn test_default_alias_resolution() {

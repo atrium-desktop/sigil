@@ -1,6 +1,6 @@
-use sigil_domain::{LockState, Namespace, Purpose, Result, SecretBytes, SigilError, Subject};
-use sigil_crypto::{derive_app_secret, derive_portal_secret, MasterKey};
-use sigil_store::{FileVaultStore, StoredCollection, StoredItem, StoredVaultData};
+use crate::domain::{LockState, Namespace, Purpose, Result, SecretBytes, SigilError, Subject};
+use crate::crypto::{derive_app_secret, derive_portal_secret, MasterKey};
+use crate::store::{FileVaultStore, StoredCollection, StoredItem, StoredVaultData};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -260,6 +260,7 @@ impl SigilService {
             .ok_or_else(|| SigilError::NotFound(format!("Item {item_id} not found")))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn set_item(
         &self,
         collection_id: &str,

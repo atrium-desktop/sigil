@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::ops::Deref;
-use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Strongly typed namespace (e.g., "xdg-portal", "secret-service", "aegis.portal.Secret/v1").
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -119,58 +117,7 @@ impl fmt::Display for CredentialId {
     }
 }
 
-/// Protected secret-bearing memory container.
-///
-/// Implements `Zeroize` and `ZeroizeOnDrop` so secret bytes are zeroed out when dropped.
-/// Explicitly avoids leaking contents in `Debug` and `Display` formatters.
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
-pub struct SecretBytes(Vec<u8>);
-
-impl SecretBytes {
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
-    pub fn from_slice(slice: &[u8]) -> Self {
-        Self(slice.to_vec())
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        &self.0
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    pub fn expose_secret(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl Deref for SecretBytes {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl fmt::Debug for SecretBytes {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SecretBytes([redacted; {} bytes])", self.0.len())
-    }
-}
-
-impl fmt::Display for SecretBytes {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[redacted; {} bytes]", self.0.len())
-    }
-}
+pub use sigil_ipc::SecretBytes;
 
 /// An encrypted blob with metadata.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -197,11 +144,4 @@ pub struct CredentialMetadata {
     pub modified_at: u64,
 }
 
-/// Service-level lock state.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum LockState {
-    Uninitialized,
-    Locked,
-    Unlocked,
-    Desynced,
-}
+pub use sigil_ipc::LockState;

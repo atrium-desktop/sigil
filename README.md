@@ -28,12 +28,10 @@ It provides a transparent, zero-touch credential lifecycle matching macOS Keycha
                 │  Secret Service adapter   │                         xdg-desktop-portal-atrium
                 │             │             │                                  │
                 │             ▼             │                                  ▼ (sigil-client)
-                │       sigil-service       │                       Unix Socket (SO_PEERCRED)
-                │       │           │       │                       /run/user/<uid>/sigil/native.sock
-                │       ▼           ▼       │                                  │
-                │     crypto      store     │◄─────────────────────────────────┤
-                │   (XChaCha20)  (Envelope) │                                  │
-                │                           │                                  ▼
+                │        sigil-core         │                       Unix Socket (SO_PEERCRED)
+                │  (crypto / store / state) │                       /run/user/<uid>/sigil/native.sock
+                │             │             │                                  │
+                │             ▼             │◄─────────────────────────────────┤
                 │  native IPC server/socket │◄────────────────── pam_sigil.so (auth, session, chauthtok)
                 └─────────────┬─────────────┘
                               │

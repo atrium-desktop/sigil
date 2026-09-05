@@ -7,10 +7,7 @@ pub use error::{ClientError, Result};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sigil_crypto::MasterKey;
-    use sigil_ipc::NativeIpcServer;
-    use sigil_service::SigilService;
-    use sigil_store::FileVaultStore;
+    use sigil_core::{FileVaultStore, MasterKey, NativeIpcServer, SigilService};
 
     #[tokio::test]
     async fn test_client_integration() {

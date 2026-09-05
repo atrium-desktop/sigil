@@ -1,8 +1,6 @@
-use crate::frame::{read_request, write_response};
-use crate::peer::check_peer_credentials;
-use crate::protocol::{IpcRequest, IpcResponse};
-use sigil_domain::{Namespace, Purpose, Result, SigilError, Subject};
-use sigil_service::SigilService;
+use crate::domain::{Namespace, Purpose, Result, SigilError, Subject};
+use crate::service::SigilService;
+use sigil_ipc::{check_peer_credentials, read_request, write_response, IpcRequest, IpcResponse};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -64,16 +62,16 @@ async fn handle_connection(mut stream: UnixStream, service: SigilService) -> Res
     if let Err(e) = check_peer_credentials(&stream) {
         let resp = IpcResponse::AccessDenied(e.to_string());
         let _ = write_response(&mut stream, &resp).await;
-        return Err(e);
+        return Err(SigilError::AccessDenied(e.to_string()));
     }
 
     loop {
         let req = match read_request(&mut stream).await {
             Ok(r) => r,
-            Err(SigilError::Io(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+            Err(sigil_ipc::IpcError::Io(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                 break;
             }
-            Err(e) => return Err(e),
+            Err(e) => return Err(SigilError::InvalidRequest(e.to_string())),
         };
 
         let resp = match req {
@@ -143,7 +141,7 @@ async fn handle_connection(mut stream: UnixStream, service: SigilService) -> Res
             }
         };
 
-        write_response(&mut stream, &resp).await?;
+        let _ = write_response(&mut stream, &resp).await;
     }
 
     Ok(())

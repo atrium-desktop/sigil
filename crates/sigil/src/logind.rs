@@ -1,5 +1,5 @@
 use futures_util::StreamExt;
-use sigil_service::SigilService;
+use sigil_core::SigilService;
 use tracing::{error, info, warn};
 
 /// Subscribe to logind Session.Lock signal and Active=false property ->

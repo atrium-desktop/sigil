@@ -1,6 +1,6 @@
 use crate::item::{Item, SecretStruct};
 use crate::session::Session;
-use sigil_service::SigilService;
+use sigil_core::SigilService;
 use rand::RngCore;
 use std::collections::HashMap;
 use std::sync::Arc;

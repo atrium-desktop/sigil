@@ -1,5 +1,5 @@
-use sigil_domain::Result;
-use sigil_crypto::{
+use sigil_core::Result;
+use sigil_core::{
     decrypt_secret_service_aes128, encrypt_secret_service_aes128,
 };
 use tracing::info;

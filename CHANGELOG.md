@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [1.3.1] - 2026-09-08
 
+### Architecture & Refactoring (Uncompromised Best Practice)
+- **Decoupled Wire Protocol (`sigil-ipc`)**: `sigil-ipc` is now a pure wire protocol and framing crate, completely decoupled from daemon, crypto, and storage logic. `pam_sigil.so` now carries zero cryptographic dependencies and zero storage engines, dramatically reducing binary surface.
+- **Unified Core Engine (`sigil-core`)**: Consolidated micro-crates (`sigil-domain`, `sigil-crypto`, `sigil-store`, `sigil-service`) into a unified `sigil-core` crate containing domain entities, XChaCha20/Argon2id/DH engines, envelope multi-slot persistence, and state machine orchestration.
+- **Server Side Relocation**: Relocated `NativeIpcServer` into `sigil-core`, maintaining clean single-direction dependency flow across all workspace crates.
+
 ### Fixed
 - **Systemd Namespacing Cold-Boot Bootstrapping**: Relaxed `ReadWritePaths` in `sigil.service` to `%h/.local/share` to prevent mount namespace setup failures (`status=226/NAMESPACE`) on pristine systems where `~/.local/share/sigil` does not exist yet.
 - **Freedesktop Secret Service Spec Compliance**: Registered `/org/freedesktop/secrets/aliases/default` to fully support standard libsecret / `secret-tool` default collection invocations without requiring explicit collection paths.

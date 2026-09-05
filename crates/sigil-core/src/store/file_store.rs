@@ -1,6 +1,6 @@
 use crate::model::{StoredVaultData, VaultMeta};
-use sigil_domain::{Result, SigilError};
-use sigil_crypto::{
+use crate::domain::{Result, SigilError};
+use crate::crypto::{
     decode_kdf, decrypt_xchacha20poly1305, derive_key_argon2id, encode_kdf,
     encrypt_xchacha20poly1305, generate_salt, KdfParams, MasterKey, DEFAULT_SALT_LEN,
 };

@@ -26,11 +26,10 @@ Historically, desktop credential management forced a trade-off between user fric
                  │  Secret Service adapter   │                         xdg-desktop-portal-atrium
                  │             │             │                                  │
                  │             ▼             │                                  ▼ (sigil-client)
-                 │       sigil-service       │                       Unix Socket (SO_PEERCRED)
-                 │       │           │       │                       /run/user/<uid>/sigil/native.sock
-                 │       ▼           ▼       │                                  │
-                 │     crypto      store     │◄─────────────────────────────────┤
-                 │                           │                                  │
+                 │        sigil-core         │                       Unix Socket (SO_PEERCRED)
+                 │  (crypto / store / state) │                       /run/user/<uid>/sigil/native.sock
+                 │             │             │                                  │
+                 │             ▼             │◄─────────────────────────────────┤
                  │  native IPC server/socket │◄─── pam_sigil.so (login/lock/chauthtok)
                  └─────────────┬─────────────┘
                                │
@@ -49,16 +48,13 @@ sigil/
 ├── Cargo.lock
 │
 ├── crates/
-│   ├── sigil-domain/         # Pure domain entities, value objects, SecretBytes, error models (#![forbid(unsafe_code)])
-│   ├── sigil-crypto/         # XChaCha20-Poly1305, Argon2id, HKDF-SHA256, DH-IETF-1024
-│   ├── sigil-store/          # Envelope multi-slot vault persistence, atomic transactions
-│   ├── sigil-service/        # Core service state machine, slot rotation, policy, collections
-│   ├── sigil-ipc/            # Framed Unix socket protocol, SO_PEERCRED verification, lifecycle requests
+│   ├── sigil-core/           # Unified engine: domain models, crypto primitives, envelope store, state machine & IPC server
+│   ├── sigil-ipc/            # Lightweight, decoupled wire protocol, framing codecs & peer credential checks
 │   ├── sigil-client/         # Async Rust SDK for desktop components (portal backend, prompter)
 │   ├── sigil-secret-service/ # D-Bus org.freedesktop.secrets protocol adapter
 │   ├── sigil/                # Daemon assembly, process hardening, logind listener
 │   ├── sigil-prompter/       # Native prompt agent for emergency recovery and unlock dialogs
-│   └── sigil-pam/            # Hardened, zero-disk PAM module (auth, setcred, session, chauthtok)
+│   └── sigil-pam/            # Hardened, zero-disk, zero-crypto-dependency PAM module (auth, setcred, session, chauthtok)
 │
 ├── docs/
 └── systemd/
@@ -70,12 +66,13 @@ sigil/
 
 ## Core Components and Responsibilities
 
-### `sigil-store`
-Implements the v2 Envelope Storage format:
-- `vault.meta`: Maintains vault UUID, active slot indices, and desync status.
-- `vault.slots/`: Individual wrapped representations of the master `VolumeKey`.
-- `vault.data`: XChaCha20-Poly1305 encrypted JSON payload.
-All mutations use atomic file replacement (`write_temp` -> `fsync` -> `rename` -> `fsync_dir`).
+### `sigil-core`
+Consolidates the core domain, cryptographic engine, envelope persistence, and service orchestration:
+- **`domain`**: Strongly typed domain identifiers (`CredentialId`, `Namespace`, `Subject`, `Purpose`, `SecretBytes`, `LockState`, `SigilError`).
+- **`crypto`**: XChaCha20-Poly1305 AEAD, Argon2id KDF, HKDF domain separation, and ephemeral Diffie-Hellman session derivation.
+- **`store`**: Envelope Multi-Slot Storage (v2 format): `vault.meta`, `vault.slots/`, `vault.data`, atomic file replacement.
+- **`service`**: State machine, lock/unlock lifecycle, zero-touch provisioning, and password rotation.
+- **`server`**: `NativeIpcServer` hosting the Unix domain socket.
 
 ### `sigil-pam`
 - **Authentication & Session (`pam_sm_authenticate` / `pam_sm_setcred` / `pam_sm_open_session`)**:

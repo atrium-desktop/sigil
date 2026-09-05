@@ -7,10 +7,7 @@ description = "Desktop session credential infrastructure daemon"
 license.workspace = true
 
 [dependencies]
-sigil-domain = { path = "../sigil-domain" }
-sigil-crypto = { path = "../sigil-crypto" }
-sigil-store = { path = "../sigil-store" }
-sigil-service = { path = "../sigil-service" }
+sigil-core = { path = "../sigil-core" }
 sigil-ipc = { path = "../sigil-ipc" }
 sigil-secret-service = { path = "../sigil-secret-service" }
 tokio = { workspace = true }

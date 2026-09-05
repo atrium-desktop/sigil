@@ -1,15 +1,15 @@
+use crate::error::{IpcError, IpcResult};
 use crate::protocol::{IpcRequest, IpcResponse};
-use sigil_domain::{Result, SigilError};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-const MAX_FRAME_SIZE: usize = 64 * 1024; // 64 KB limit for safety
+pub const MAX_FRAME_SIZE: usize = 64 * 1024; // 64 KB limit for safety
 
 pub async fn write_request<W: AsyncWrite + Unpin>(
     writer: &mut W,
     req: &IpcRequest,
-) -> Result<()> {
+) -> IpcResult<()> {
     let payload = serde_json::to_vec(req)
-        .map_err(|e| SigilError::Internal(format!("Serialization error: {e}")))?;
+        .map_err(|e| IpcError::Serialization(e.to_string()))?;
 
     let len = payload.len() as u32;
     writer.write_all(&len.to_be_bytes()).await?;
@@ -18,20 +18,20 @@ pub async fn write_request<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
-pub async fn read_request<R: AsyncRead + Unpin>(reader: &mut R) -> Result<IpcRequest> {
+pub async fn read_request<R: AsyncRead + Unpin>(reader: &mut R) -> IpcResult<IpcRequest> {
     let mut len_bytes = [0u8; 4];
     reader.read_exact(&mut len_bytes).await?;
     let len = u32::from_be_bytes(len_bytes) as usize;
 
     if len > MAX_FRAME_SIZE {
-        return Err(SigilError::InvalidRequest("Frame size exceeds limit".into()));
+        return Err(IpcError::FrameTooLarge(len, MAX_FRAME_SIZE));
     }
 
     let mut buf = vec![0u8; len];
     reader.read_exact(&mut buf).await?;
 
     let req: IpcRequest = serde_json::from_slice(&buf)
-        .map_err(|e| SigilError::InvalidRequest(format!("Deserialization error: {e}")))?;
+        .map_err(|e| IpcError::Deserialization(e.to_string()))?;
 
     Ok(req)
 }
@@ -39,9 +39,9 @@ pub async fn read_request<R: AsyncRead + Unpin>(reader: &mut R) -> Result<IpcReq
 pub async fn write_response<W: AsyncWrite + Unpin>(
     writer: &mut W,
     resp: &IpcResponse,
-) -> Result<()> {
+) -> IpcResult<()> {
     let payload = serde_json::to_vec(resp)
-        .map_err(|e| SigilError::Internal(format!("Serialization error: {e}")))?;
+        .map_err(|e| IpcError::Serialization(e.to_string()))?;
 
     let len = payload.len() as u32;
     writer.write_all(&len.to_be_bytes()).await?;
@@ -50,27 +50,27 @@ pub async fn write_response<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
-pub async fn read_response<R: AsyncRead + Unpin>(reader: &mut R) -> Result<IpcResponse> {
+pub async fn read_response<R: AsyncRead + Unpin>(reader: &mut R) -> IpcResult<IpcResponse> {
     let mut len_bytes = [0u8; 4];
     reader.read_exact(&mut len_bytes).await?;
     let len = u32::from_be_bytes(len_bytes) as usize;
 
     if len > MAX_FRAME_SIZE {
-        return Err(SigilError::InvalidRequest("Frame size exceeds limit".into()));
+        return Err(IpcError::FrameTooLarge(len, MAX_FRAME_SIZE));
     }
 
     let mut buf = vec![0u8; len];
     reader.read_exact(&mut buf).await?;
 
     let resp: IpcResponse = serde_json::from_slice(&buf)
-        .map_err(|e| SigilError::InvalidRequest(format!("Deserialization error: {e}")))?;
+        .map_err(|e| IpcError::Deserialization(e.to_string()))?;
 
     Ok(resp)
 }
 
-pub fn write_request_sync<W: std::io::Write>(writer: &mut W, req: &IpcRequest) -> Result<()> {
+pub fn write_request_sync<W: std::io::Write>(writer: &mut W, req: &IpcRequest) -> IpcResult<()> {
     let payload = serde_json::to_vec(req)
-        .map_err(|e| SigilError::Internal(format!("Serialization error: {e}")))?;
+        .map_err(|e| IpcError::Serialization(e.to_string()))?;
 
     let len = payload.len() as u32;
     writer.write_all(&len.to_be_bytes())?;
@@ -79,20 +79,49 @@ pub fn write_request_sync<W: std::io::Write>(writer: &mut W, req: &IpcRequest) -
     Ok(())
 }
 
-pub fn read_response_sync<R: std::io::Read>(reader: &mut R) -> Result<IpcResponse> {
+pub fn read_response_sync<R: std::io::Read>(reader: &mut R) -> IpcResult<IpcResponse> {
     let mut len_bytes = [0u8; 4];
     reader.read_exact(&mut len_bytes)?;
     let len = u32::from_be_bytes(len_bytes) as usize;
 
     if len > MAX_FRAME_SIZE {
-        return Err(SigilError::InvalidRequest("Frame size exceeds limit".into()));
+        return Err(IpcError::FrameTooLarge(len, MAX_FRAME_SIZE));
     }
 
     let mut buf = vec![0u8; len];
     reader.read_exact(&mut buf)?;
 
     let resp: IpcResponse = serde_json::from_slice(&buf)
-        .map_err(|e| SigilError::InvalidRequest(format!("Deserialization error: {e}")))?;
+        .map_err(|e| IpcError::Deserialization(e.to_string()))?;
 
     Ok(resp)
+}
+
+pub fn write_response_sync<W: std::io::Write>(writer: &mut W, resp: &IpcResponse) -> IpcResult<()> {
+    let payload = serde_json::to_vec(resp)
+        .map_err(|e| IpcError::Serialization(e.to_string()))?;
+
+    let len = payload.len() as u32;
+    writer.write_all(&len.to_be_bytes())?;
+    writer.write_all(&payload)?;
+    writer.flush()?;
+    Ok(())
+}
+
+pub fn read_request_sync<R: std::io::Read>(reader: &mut R) -> IpcResult<IpcRequest> {
+    let mut len_bytes = [0u8; 4];
+    reader.read_exact(&mut len_bytes)?;
+    let len = u32::from_be_bytes(len_bytes) as usize;
+
+    if len > MAX_FRAME_SIZE {
+        return Err(IpcError::FrameTooLarge(len, MAX_FRAME_SIZE));
+    }
+
+    let mut buf = vec![0u8; len];
+    reader.read_exact(&mut buf)?;
+
+    let req: IpcRequest = serde_json::from_slice(&buf)
+        .map_err(|e| IpcError::Deserialization(e.to_string()))?;
+
+    Ok(req)
 }

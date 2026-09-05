@@ -3,7 +3,7 @@ use chacha20poly1305::{
     aead::{Aead, AeadCore, KeyInit, Payload},
     XChaCha20Poly1305, XNonce,
 };
-use sigil_domain::{Result, SecretBytes, SigilError};
+use crate::domain::{Result, SecretBytes, SigilError};
 use rand::rngs::OsRng;
 
 pub const NONCE_LEN: usize = 24;

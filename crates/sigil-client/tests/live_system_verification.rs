@@ -1,10 +1,10 @@
+use sigil_client::SigilClient;
 use std::collections::HashMap;
 use std::io::Read;
 use std::os::fd::{AsFd, FromRawFd};
 use std::path::PathBuf;
 use zbus::blocking::Connection;
 use zbus::zvariant::{Fd, ObjectPath, OwnedObjectPath, OwnedValue, Value};
-use sigil_client::SigilClient;
 
 fn get_pipe() -> (std::fs::File, std::fs::File) {
     let mut fds = [0; 2];
@@ -49,7 +49,11 @@ async fn test_live_sigil_native_socket() {
         )
         .await
         .expect("get_application_secret repeated failed");
-    assert_eq!(app1_secret.as_slice(), app1_secret_repeat.as_slice(), "Secrets must be deterministic");
+    assert_eq!(
+        app1_secret.as_slice(),
+        app1_secret_repeat.as_slice(),
+        "Secrets must be deterministic"
+    );
 
     let app2_secret = client
         .get_application_secret(
@@ -60,7 +64,11 @@ async fn test_live_sigil_native_socket() {
         .await
         .expect("get_application_secret for app2 failed");
     assert_eq!(app2_secret.len(), 32);
-    assert_ne!(app1_secret.as_slice(), app2_secret.as_slice(), "Different apps must receive isolated secrets");
+    assert_ne!(
+        app1_secret.as_slice(),
+        app2_secret.as_slice(),
+        "Different apps must receive isolated secrets"
+    );
 
     println!("Live sigil native socket tests passed successfully!");
 }
@@ -79,7 +87,9 @@ fn test_live_xdg_desktop_portal_atrium_backend() {
     )
     .expect("Failed to create proxy for atrium portal Secret");
 
-    let version: u32 = portal.get_property("version").expect("Failed to get version property");
+    let version: u32 = portal
+        .get_property("version")
+        .expect("Failed to get version property");
     println!("atrium portal Secret version: {}", version);
     assert_eq!(version, 1);
 
@@ -90,17 +100,25 @@ fn test_live_xdg_desktop_portal_atrium_backend() {
     let options: HashMap<String, Value> = HashMap::new();
 
     let reply: (u32, HashMap<String, OwnedValue>) = portal
-        .call("RetrieveSecret", &(handle, "org.test.portal_app", fd, options))
+        .call(
+            "RetrieveSecret",
+            &(handle, "org.test.portal_app", fd, options),
+        )
         .expect("RetrieveSecret D-Bus call failed");
 
-    println!("RetrieveSecret return code: {}, results: {:?}", reply.0, reply.1);
+    println!(
+        "RetrieveSecret return code: {}, results: {:?}",
+        reply.0, reply.1
+    );
     assert_eq!(reply.0, 0, "RetrieveSecret returned non-zero error code");
 
     // Close the write pipe in our process so read_pipe can see EOF
     drop(write_pipe);
 
     let mut secret_bytes = Vec::new();
-    read_pipe.read_to_end(&mut secret_bytes).expect("Failed to read from pipe");
+    read_pipe
+        .read_to_end(&mut secret_bytes)
+        .expect("Failed to read from pipe");
     println!("Read {} secret bytes from portal pipe", secret_bytes.len());
     assert_eq!(secret_bytes.len(), 32, "Portal secret should be 32 bytes");
 
@@ -120,7 +138,11 @@ fn test_live_xdg_desktop_portal_atrium_backend() {
             .unwrap()
     });
 
-    assert_eq!(secret_bytes, native_secret.as_slice(), "Portal delivered secret must match sigil derived secret");
+    assert_eq!(
+        secret_bytes,
+        native_secret.as_slice(),
+        "Portal delivered secret must match sigil derived secret"
+    );
     println!("Live xdg-desktop-portal-atrium backend verification passed!");
 }
 
@@ -145,17 +167,28 @@ fn test_live_xdg_desktop_portal_frontend() {
         .call("RetrieveSecret", &(fd, options))
         .expect("RetrieveSecret frontend D-Bus call failed");
 
-    println!("Frontend returned request handle: {}", request_handle.as_str());
+    println!(
+        "Frontend returned request handle: {}",
+        request_handle.as_str()
+    );
 
     // Close the write pipe in our process
     drop(write_pipe);
 
     // Read secret written by backend via frontend routing
     let mut secret_bytes = Vec::new();
-    read_pipe.read_to_end(&mut secret_bytes).expect("Failed to read from pipe");
-    println!("Frontend flow: Read {} secret bytes from pipe", secret_bytes.len());
-    assert_eq!(secret_bytes.len(), 32, "Portal frontend should write 32 bytes to fd");
+    read_pipe
+        .read_to_end(&mut secret_bytes)
+        .expect("Failed to read from pipe");
+    println!(
+        "Frontend flow: Read {} secret bytes from pipe",
+        secret_bytes.len()
+    );
+    assert_eq!(
+        secret_bytes.len(),
+        32,
+        "Portal frontend should write 32 bytes to fd"
+    );
 
     println!("Live xdg-desktop-portal frontend end-to-end verification passed!");
 }
-

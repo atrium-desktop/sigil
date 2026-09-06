@@ -114,11 +114,25 @@ When you enter your password to dismiss the screen lock, `pam_sigil.so` transmit
 
 ## Headless / Container Deployments
 
-For automated CI, containers, or headless IoT systems where no PAM or graphical seat exists, supply the vault password via environment variable:
+For automated CI, containers, or headless IoT systems where no PAM or graphical seat exists, supply the vault password via command-line argument, password file, or environment variable:
+
+### Method 1: Systemd Credential File (Recommended for Production)
 
 ```ini
-# ~/.config/systemd/user/sigil.service [Service]
+# ~/.config/systemd/user/sigil.service.d/override.conf
+[Service]
+LoadCredential=vault_password:/etc/credstore/vault.key
+ExecStart=
+ExecStart=/usr/bin/sigil --password-file %d/vault_password
+```
+
+### Method 2: Environment Variable
+
+```ini
+# ~/.config/systemd/user/sigil.service.d/override.conf [Service]
 Environment="SIGIL_PASSWORD=your_device_provisioning_key"
 ```
 
-The daemon detects the environment variable, provisions or unlocks Slot 0 automatically, and securely zeroes the environment buffer in memory.
+The daemon automatically detects the key, provisions or unlocks Slot 0, and securely zeroizes (`zeroize::Zeroize`) the password buffer in memory immediately after initialization.
+
+See [CLI Reference](../reference/cli.md) for full configuration options.

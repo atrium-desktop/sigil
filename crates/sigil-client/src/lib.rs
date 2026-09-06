@@ -11,7 +11,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_client_integration() {
-        let temp_dir = std::env::temp_dir().join(format!("sigil_client_test_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("sigil_client_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp_dir);
 
         let sock_path = temp_dir.join("native.sock");
@@ -67,10 +68,16 @@ mod tests {
         assert!(!client.is_locked().await.unwrap());
 
         // Test rotate password via client
-        client.rotate_password(pwd, "rotated-passphrase").await.unwrap();
+        client
+            .rotate_password(pwd, "rotated-passphrase")
+            .await
+            .unwrap();
         client.lock().await.unwrap();
         assert!(client.unlock_with_password(pwd).await.is_err());
-        client.unlock_with_password("rotated-passphrase").await.unwrap();
+        client
+            .unlock_with_password("rotated-passphrase")
+            .await
+            .unwrap();
         assert!(!client.is_locked().await.unwrap());
 
         let _ = std::fs::remove_dir_all(&temp_dir);

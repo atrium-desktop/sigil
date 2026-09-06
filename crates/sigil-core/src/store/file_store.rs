@@ -1,9 +1,9 @@
-use crate::model::{StoredVaultData, VaultMeta};
-use crate::domain::{Result, SigilError};
 use crate::crypto::{
     decode_kdf, decrypt_xchacha20poly1305, derive_item_key, derive_key_argon2id, encode_kdf,
     encrypt_xchacha20poly1305, generate_salt, KdfParams, MasterKey, DEFAULT_SALT_LEN,
 };
+use crate::domain::{Result, SigilError};
+use crate::model::{StoredVaultData, VaultMeta};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -48,9 +48,9 @@ pub fn ensure_secure_dir(dir: &Path) -> Result<()> {
 
 /// Atomically replaces a file by writing to a secure tempfile and renaming it.
 pub fn atomic_replace(path: &Path, content: &[u8]) -> Result<()> {
-    let parent = path.parent().ok_or_else(|| {
-        SigilError::StorageFailure("Cannot get parent directory of path".into())
-    })?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| SigilError::StorageFailure("Cannot get parent directory of path".into()))?;
     ensure_secure_dir(parent)?;
 
     let mut temp_path = path.to_path_buf();
@@ -145,8 +145,9 @@ impl FileVaultStore {
     }
 
     pub fn write_meta(&self, meta: &VaultMeta) -> Result<()> {
-        let json = serde_json::to_vec(meta)
-            .map_err(|e| SigilError::StorageFailure(format!("Failed to serialize vault.meta: {e}")))?;
+        let json = serde_json::to_vec(meta).map_err(|e| {
+            SigilError::StorageFailure(format!("Failed to serialize vault.meta: {e}"))
+        })?;
         atomic_replace(&self.meta_path(), &json)
     }
 
@@ -243,7 +244,9 @@ impl FileVaultStore {
     pub fn unlock_with_password(&self, password: &str) -> Result<MasterKey> {
         // Check for legacy v1 format first
         if !self.data_path().exists() && self.legacy_enc_path().exists() {
-            info!("Legacy v1 vault detected. Performing transparent migration to v2 envelope slots.");
+            info!(
+                "Legacy v1 vault detected. Performing transparent migration to v2 envelope slots."
+            );
             return self.migrate_legacy_v1_vault(password);
         }
 
@@ -318,8 +321,9 @@ impl FileVaultStore {
         // Read legacy vault.enc
         let enc_bytes = fs::read(self.legacy_enc_path())?;
         let mut decrypted = decrypt_xchacha20poly1305(&legacy_key, &enc_bytes, b"")?;
-        let data: StoredVaultData = serde_json::from_slice(decrypted.as_slice())
-            .map_err(|e| SigilError::CorruptData(format!("Failed to parse legacy vault data: {e}")))?;
+        let data: StoredVaultData = serde_json::from_slice(decrypted.as_slice()).map_err(|e| {
+            SigilError::CorruptData(format!("Failed to parse legacy vault data: {e}"))
+        })?;
         decrypted.zeroize();
 
         // Generate fresh VolumeKey and initialize v2 envelope layout

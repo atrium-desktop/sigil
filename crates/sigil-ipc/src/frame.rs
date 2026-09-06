@@ -138,9 +138,7 @@ pub fn encode_response(resp: &IpcResponse, out: &mut Vec<u8>) -> IpcResult<()> {
     out.push(PROTOCOL_VERSION);
 
     let (status, mut payload) = match resp {
-        IpcResponse::Secret(secret_bytes) => {
-            (STATUS_SECRET, secret_bytes.as_slice().to_vec())
-        }
+        IpcResponse::Secret(secret_bytes) => (STATUS_SECRET, secret_bytes.as_slice().to_vec()),
         IpcResponse::LockStatus(state) => {
             let code = match state {
                 LockState::Uninitialized => 0u8,
@@ -183,9 +181,7 @@ pub fn encode_response(resp: &IpcResponse, out: &mut Vec<u8>) -> IpcResult<()> {
 pub fn decode_response(status: u8, payload: &[u8]) -> IpcResult<IpcResponse> {
     match status {
         STATUS_SUCCESS => Ok(IpcResponse::Success),
-        STATUS_SECRET => {
-            Ok(IpcResponse::Secret(SecretBytes::new(payload.to_vec())))
-        }
+        STATUS_SECRET => Ok(IpcResponse::Secret(SecretBytes::new(payload.to_vec()))),
         STATUS_LOCK_STATUS => {
             if payload.is_empty() {
                 return Err(IpcError::MalformedPayload("Missing lock state byte".into()));
@@ -225,7 +221,9 @@ pub fn decode_response(status: u8, payload: &[u8]) -> IpcResult<IpcResponse> {
 fn encode_string(out: &mut Vec<u8>, s: &str) -> IpcResult<()> {
     let bytes = s.as_bytes();
     if bytes.len() > u16::MAX as usize {
-        return Err(IpcError::Serialization("String length exceeds u16 limit".into()));
+        return Err(IpcError::Serialization(
+            "String length exceeds u16 limit".into(),
+        ));
     }
     out.extend_from_slice(&(bytes.len() as u16).to_be_bytes());
     out.extend_from_slice(bytes);
@@ -234,7 +232,9 @@ fn encode_string(out: &mut Vec<u8>, s: &str) -> IpcResult<()> {
 
 fn decode_string(payload: &[u8], offset: &mut usize) -> IpcResult<String> {
     if *offset + 2 > payload.len() {
-        return Err(IpcError::MalformedPayload("Truncated string length prefix".into()));
+        return Err(IpcError::MalformedPayload(
+            "Truncated string length prefix".into(),
+        ));
     }
     let len = u16::from_be_bytes([payload[*offset], payload[*offset + 1]]) as usize;
     *offset += 2;

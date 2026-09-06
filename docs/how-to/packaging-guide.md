@@ -78,6 +78,10 @@ check() {
   cd "$pkgname-$pkgver"
   export RUSTUP_TOOLCHAIN=stable
   cargo test --frozen --workspace
+
+  # Smoke test binaries respond to version query without running daemon
+  target/release/sigil --version
+  target/release/sigil-prompter --version
 }
 
 package() {

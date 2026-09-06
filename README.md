@@ -118,6 +118,12 @@ session    optional     pam_sigil.so
 
 ## Verification & Standard CLI Tooling
 
+Verify binary installations:
+```bash
+sigil --version
+sigil-prompter --version
+```
+
 `sigil` strictly implements the Freedesktop Secret Service standard. You can query, store, and inspect credentials using the standard `secret-tool` utility:
 
 ```bash
@@ -162,6 +168,7 @@ busctl --user status org.freedesktop.secrets
 - **[Packaging Guide](docs/how-to/packaging-guide.md)**
 - **[Storage Format Reference](docs/reference/storage-format.md)**
 - **[Native IPC Reference](docs/reference/native-ipc.md)**
+- **[CLI Reference](docs/reference/cli.md)**
 
 ---
 

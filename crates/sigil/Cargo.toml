@@ -13,9 +13,10 @@ sigil-secret-service = { path = "../sigil-secret-service" }
 tokio = { workspace = true }
 zbus = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 directories = { workspace = true }
 zeroize = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true }
 futures-util = { workspace = true }
+clap = { workspace = true }

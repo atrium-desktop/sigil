@@ -18,7 +18,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_ipc_server_client_flow() {
-        let temp_dir = std::env::temp_dir().join(format!("sigil_ipc_core_test_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("sigil_ipc_core_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp_dir);
 
         let sock_path = temp_dir.join("native.sock");
@@ -49,7 +50,9 @@ mod tests {
         assert!(matches!(resp, IpcResponse::Success));
 
         // GetLockStatus
-        write_request(&mut stream, &IpcRequest::GetLockStatus).await.unwrap();
+        write_request(&mut stream, &IpcRequest::GetLockStatus)
+            .await
+            .unwrap();
         let resp = read_response(&mut stream).await.unwrap();
         assert!(matches!(resp, IpcResponse::LockStatus(LockState::Unlocked)));
 

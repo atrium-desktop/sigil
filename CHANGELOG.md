@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.8] - 2026-09-08
+
+### CLI & Usability
+- **Unified Standard CLI Interface**: Migrated `sigil` and `sigil-prompter` to an industrial-grade `clap` CLI parser. Full standard compliance with `--version` (`-V`), `--help` (`-h`), configuration overrides (`--data-dir`, `--socket-path`), credential injection (`--password`, `--password-file`), and diagnostics verbosity (`-v`, `-vv`, `-q`).
+- **Strict Pre-Execution Parsing**: Command-line arguments are fully validated before daemon hardening or D-Bus registration, eliminating accidental daemon execution on introspection queries.
+
 ## [1.3.7] - 2026-09-08
 
 ### Architecture & Security (ADR-0004)

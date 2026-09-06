@@ -1,12 +1,12 @@
 pub mod state;
 
-pub use state::{CollectionRecord, SigilService, ItemRecord};
+pub use state::{CollectionRecord, ItemRecord, SigilService};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{LockState, Namespace, Purpose, Subject};
     use crate::crypto::MasterKey;
+    use crate::domain::{LockState, Namespace, Purpose, Subject};
     use crate::store::FileVaultStore;
     use std::collections::HashMap;
 
@@ -67,7 +67,10 @@ mod tests {
 
         // Search
         let matches = service
-            .search_items(None, &HashMap::from([("service".into(), "github.com".into())]))
+            .search_items(
+                None,
+                &HashMap::from([("service".into(), "github.com".into())]),
+            )
             .await
             .unwrap();
         assert_eq!(matches.len(), 1);
@@ -93,7 +96,10 @@ mod tests {
         assert_eq!(service.lock_state().await, LockState::Uninitialized);
 
         // Auto-provision via unlock_with_password
-        service.unlock_with_password("my-initial-pwd").await.unwrap();
+        service
+            .unlock_with_password("my-initial-pwd")
+            .await
+            .unwrap();
         assert_eq!(service.lock_state().await, LockState::Unlocked);
 
         // Store an item and save
@@ -115,17 +121,26 @@ mod tests {
         assert_eq!(service.lock_state().await, LockState::Locked);
 
         // Rotate password
-        service.rotate_password("my-initial-pwd", "my-new-pwd").await.unwrap();
+        service
+            .rotate_password("my-initial-pwd", "my-new-pwd")
+            .await
+            .unwrap();
 
         // Old password fails
-        assert!(service.unlock_with_password("my-initial-pwd").await.is_err());
+        assert!(service
+            .unlock_with_password("my-initial-pwd")
+            .await
+            .is_err());
 
         // New password unlocks
         service.unlock_with_password("my-new-pwd").await.unwrap();
         assert_eq!(service.lock_state().await, LockState::Unlocked);
         let item = service.get_item("login", "vault-secret").await.unwrap();
         assert_eq!(item.label, "My Secret");
-        let secret = service.get_item_secret("login", "vault-secret").await.unwrap();
+        let secret = service
+            .get_item_secret("login", "vault-secret")
+            .await
+            .unwrap();
         assert_eq!(secret.as_slice(), b"confidential-data");
 
         // Simulate desync
@@ -134,7 +149,10 @@ mod tests {
         assert_eq!(service.lock_state().await, LockState::Desynced);
 
         // Recover and sync with new session password
-        service.recover_and_sync("my-new-pwd", "recovered-pwd").await.unwrap();
+        service
+            .recover_and_sync("my-new-pwd", "recovered-pwd")
+            .await
+            .unwrap();
         assert_eq!(service.lock_state().await, LockState::Unlocked);
         assert!(!store.is_desynced());
 

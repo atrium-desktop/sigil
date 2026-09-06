@@ -15,7 +15,8 @@ mod tests {
 
     #[test]
     fn test_file_store_roundtrip() {
-        let temp_dir = std::env::temp_dir().join(format!("sigil_test_store_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("sigil_test_store_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp_dir);
 
         let store = FileVaultStore::new(temp_dir.clone());
@@ -99,7 +100,9 @@ mod tests {
         assert!(store.unlock_with_password("wrong-pass").is_err());
 
         // 3. Rotate password (e.g. pam_sm_chauthtok)
-        store.rotate_password("initial-pass", "new-system-pass").unwrap();
+        store
+            .rotate_password("initial-pass", "new-system-pass")
+            .unwrap();
 
         // Old password fails, new password succeeds
         assert!(store.unlock_with_password("initial-pass").is_err());
@@ -114,7 +117,9 @@ mod tests {
         store.mark_desynced(true).unwrap();
         assert!(store.is_desynced());
 
-        let recovered_key = store.recover_and_sync("new-system-pass", "final-pass").unwrap();
+        let recovered_key = store
+            .recover_and_sync("new-system-pass", "final-pass")
+            .unwrap();
         assert_eq!(vol_key.as_bytes(), recovered_key.as_bytes());
         assert!(!store.is_desynced());
 

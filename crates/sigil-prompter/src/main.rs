@@ -1,16 +1,20 @@
+use clap::Parser;
 use iris::{Application, Config};
 use lens::{Frame, Input, TextBuf};
 use sigil_ipc::{write_request_sync, IpcRequest};
 
+/// Interactive graphical credential prompter for Sigil vault.
+#[derive(Parser, Debug)]
+#[command(
+    name = "sigil-prompter",
+    author,
+    version,
+    about = "Interactive graphical credential prompter for Sigil vault"
+)]
+struct Cli {}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::args()
-        .nth(1)
-        .as_deref()
-        .is_some_and(|a| a == "--version" || a == "-V")
-    {
-        println!("{} {}", env!("CARGO_BIN_NAME"), env!("CARGO_PKG_VERSION"));
-        return Ok(());
-    }
+    let _cli = Cli::parse();
 
     let mut state = PrompterState::new();
     let config = Config::new("Vault Unlock")?
@@ -94,18 +98,14 @@ impl PrompterState {
 
                 frame.spacer(4.0);
 
-                frame
-                    .row()
-                    .gap(16.0)
-                    .items_center()
-                    .show(|frame| {
-                        if frame.button("Cancel") {
-                            trigger_cancel = true;
-                        }
-                        if frame.button_primary("Unlock") {
-                            trigger_submit = true;
-                        }
-                    });
+                frame.row().gap(16.0).items_center().show(|frame| {
+                    if frame.button("Cancel") {
+                        trigger_cancel = true;
+                    }
+                    if frame.button_primary("Unlock") {
+                        trigger_submit = true;
+                    }
+                });
             });
 
         if trigger_cancel {
@@ -134,6 +134,9 @@ fn send_password(password: String) {
             let req = IpcRequest::UnlockWithPassword { password };
             let _ = write_request_sync(&mut stream, &req);
         }
-        Err(e) => eprintln!("Failed to connect to daemon socket at {:?}: {}", socket_path, e),
+        Err(e) => eprintln!(
+            "Failed to connect to daemon socket at {:?}: {}",
+            socket_path, e
+        ),
     }
 }

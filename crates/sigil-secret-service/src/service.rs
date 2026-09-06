@@ -1,9 +1,9 @@
 use crate::collection::Collection;
 use crate::item::{Item, SecretStruct};
 use crate::session::{Session, SessionAlgorithm};
-use sigil_core::{DhSession, SigilService};
 use rand::rngs::OsRng;
 use rand::RngCore;
+use sigil_core::{DhSession, SigilService};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -35,15 +35,15 @@ impl SecretServiceDbus {
     ) -> zbus::fdo::Result<(OwnedValue, OwnedObjectPath)> {
         let mut rng = OsRng;
         let session_id = format!("s_{}", rng.next_u64());
-        let session_path = OwnedObjectPath::try_from(format!(
-            "/org/freedesktop/secrets/session/{session_id}"
-        ))
-        .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        let session_path =
+            OwnedObjectPath::try_from(format!("/org/freedesktop/secrets/session/{session_id}"))
+                .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
         let (output_val, session_algo) = match algorithm {
             "plain" => {
                 let v = Value::from("");
-                let ov = v.try_into_owned()
+                let ov = v
+                    .try_into_owned()
                     .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
                 (ov, SessionAlgorithm::Plain)
             }
@@ -58,21 +58,30 @@ impl SecretServiceDbus {
                         }
                         bytes
                     }
-                    _ => return Err(zbus::fdo::Error::InvalidArgs("Expected array of bytes".into())),
+                    _ => {
+                        return Err(zbus::fdo::Error::InvalidArgs(
+                            "Expected array of bytes".into(),
+                        ))
+                    }
                 };
 
-                let dh = DhSession::generate()
-                    .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+                let dh =
+                    DhSession::generate().map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
                 let aes_key = dh
                     .derive_shared_key(&peer_pub)
                     .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
                 let out_bytes = Value::from(dh.public_key.clone());
-                let ov = out_bytes.try_into_owned()
+                let ov = out_bytes
+                    .try_into_owned()
                     .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
                 (ov, SessionAlgorithm::Dh(aes_key))
             }
-            _ => return Err(zbus::fdo::Error::NotSupported("Algorithm not supported".into())),
+            _ => {
+                return Err(zbus::fdo::Error::NotSupported(
+                    "Algorithm not supported".into(),
+                ))
+            }
         };
 
         let session = Arc::new(Session {
@@ -101,7 +110,8 @@ impl SecretServiceDbus {
         alias: &str,
     ) -> zbus::fdo::Result<(OwnedObjectPath, OwnedObjectPath)> {
         if alias == "default" {
-            let col_path = OwnedObjectPath::try_from("/org/freedesktop/secrets/collection/login").unwrap();
+            let col_path =
+                OwnedObjectPath::try_from("/org/freedesktop/secrets/collection/login").unwrap();
             let prompt_path = OwnedObjectPath::try_from("/").unwrap();
             return Ok((col_path, prompt_path));
         }
@@ -121,10 +131,9 @@ impl SecretServiceDbus {
             .await
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
-        let col_path = OwnedObjectPath::try_from(format!(
-            "/org/freedesktop/secrets/collection/{col_id}"
-        ))
-        .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        let col_path =
+            OwnedObjectPath::try_from(format!("/org/freedesktop/secrets/collection/{col_id}"))
+                .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
         let col_obj = Collection {
             id: col_id,
@@ -135,9 +144,9 @@ impl SecretServiceDbus {
         let _ = conn.object_server().at(&col_path, col_obj.clone()).await;
 
         if !alias.is_empty() {
-            if let Ok(alias_path) = OwnedObjectPath::try_from(format!(
-                "/org/freedesktop/secrets/aliases/{alias}"
-            )) {
+            if let Ok(alias_path) =
+                OwnedObjectPath::try_from(format!("/org/freedesktop/secrets/aliases/{alias}"))
+            {
                 let _ = conn.object_server().at(&alias_path, col_obj).await;
             }
         }
@@ -259,9 +268,9 @@ impl SecretServiceDbus {
         let ids = self.service.get_collection_ids().await;
         let mut paths = Vec::new();
         for id in ids {
-            if let Ok(p) = OwnedObjectPath::try_from(format!(
-                "/org/freedesktop/secrets/collection/{id}"
-            )) {
+            if let Ok(p) =
+                OwnedObjectPath::try_from(format!("/org/freedesktop/secrets/collection/{id}"))
+            {
                 paths.push(p);
             }
         }
@@ -276,7 +285,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_default_alias_resolution() {
-        let temp_dir = std::env::temp_dir().join(format!("sigil_alias_test_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("sigil_alias_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp_dir);
         std::fs::create_dir_all(&temp_dir).unwrap();
 
@@ -285,7 +295,10 @@ mod tests {
         let secret_service = SecretServiceDbus::new(service);
 
         let default_alias = secret_service.read_alias("default").await.unwrap();
-        assert_eq!(default_alias.as_str(), "/org/freedesktop/secrets/collection/login");
+        assert_eq!(
+            default_alias.as_str(),
+            "/org/freedesktop/secrets/collection/login"
+        );
 
         let unknown_alias = secret_service.read_alias("custom").await.unwrap();
         assert_eq!(unknown_alias.as_str(), "/");

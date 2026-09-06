@@ -46,4 +46,3 @@ pub fn derive_item_key(master_key: &MasterKey, item_id: &str) -> MasterKey {
 
     MasterKey::new(okm)
 }
-

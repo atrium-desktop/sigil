@@ -31,10 +31,7 @@ impl Item {
         Ok(ObjectPath::from_static_str("/").unwrap())
     }
 
-    async fn get_secret(
-        &self,
-        session_path: OwnedObjectPath,
-    ) -> zbus::fdo::Result<SecretStruct> {
+    async fn get_secret(&self, session_path: OwnedObjectPath) -> zbus::fdo::Result<SecretStruct> {
         let sessions = self.sessions.read().await;
         let session = sessions
             .get(&session_path)

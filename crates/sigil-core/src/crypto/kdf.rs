@@ -1,6 +1,6 @@
+use crate::domain::{Result, SigilError};
 use crate::key::MasterKey;
 use argon2::{Algorithm, Argon2, Params, Version};
-use crate::domain::{Result, SigilError};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};

@@ -1,13 +1,15 @@
-use directories::ProjectDirs;
+use clap::Parser;
 use sigil_core::{ensure_secure_dir, FileVaultStore, NativeIpcServer, SigilService};
 use sigil_secret_service::{Collection, Prompt, SecretServiceDbus};
 use std::error::Error;
-use std::path::PathBuf;
 use tracing::{error, info, warn};
 use zbus::connection;
 use zeroize::Zeroize;
 
+mod cli;
 mod logind;
+
+use cli::Cli;
 
 fn apply_process_hardening() {
     #[cfg(target_os = "linux")]
@@ -31,42 +33,41 @@ fn apply_process_hardening() {
     }
 }
 
-fn get_data_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("SIGIL_DATA_DIR") {
-        return PathBuf::from(dir);
-    }
-    if let Some(proj_dirs) = ProjectDirs::from("org", "freedesktop", "sigil") {
-        proj_dirs.data_dir().to_path_buf()
-    } else {
-        PathBuf::from(".local/share/sigil")
-    }
-}
-
-fn get_runtime_socket_path() -> PathBuf {
-    if let Ok(path) = std::env::var("SIGIL_SOCKET_PATH") {
-        return PathBuf::from(path);
-    }
-    let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
-    PathBuf::from(runtime_dir).join("sigil/native.sock")
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    apply_process_hardening();
-    tracing_subscriber::fmt::init();
-    info!("Starting sigil daemon...");
+    // Parse CLI arguments before any daemon initialization or hardening
+    let mut cli = Cli::parse();
 
-    let data_dir = get_data_dir();
+    apply_process_hardening();
+    cli.init_logging();
+    info!("Starting sigil daemon v{}...", env!("CARGO_PKG_VERSION"));
+
+    let data_dir = cli.resolve_data_dir();
     ensure_secure_dir(&data_dir)?;
     let store = FileVaultStore::new(data_dir.clone());
     let service = SigilService::new(store.clone());
 
-    // Check for explicit headless password configuration
-    if let Ok(mut pwd) = std::env::var("SIGIL_PASSWORD") {
+    // Resolve headless unlock password if provided via CLI flag, file, or environment variable
+    let mut initial_password = if let Some(ref path) = cli.password_file {
+        match std::fs::read_to_string(path) {
+            Ok(content) => Some(content.trim_end_matches(&['\r', '\n'][..]).to_string()),
+            Err(e) => {
+                error!("Failed to read password file at {}: {}", path.display(), e);
+                None
+            }
+        }
+    } else {
+        cli.password.take()
+    };
+
+    if let Some(ref mut pwd) = initial_password {
         if !pwd.is_empty() {
-            match service.unlock_with_password(&pwd).await {
-                Ok(_) => info!("Vault initialized/unlocked from SIGIL_PASSWORD."),
-                Err(e) => error!("Failed to initialize/unlock vault with SIGIL_PASSWORD: {}", e),
+            match service.unlock_with_password(pwd).await {
+                Ok(_) => info!("Vault initialized/unlocked from CLI password configuration."),
+                Err(e) => error!(
+                    "Failed to initialize/unlock vault with provided password: {}",
+                    e
+                ),
             }
             pwd.zeroize();
         }
@@ -88,7 +89,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Spawn Native IPC server
-    let socket_path = get_runtime_socket_path();
+    let socket_path = cli.resolve_socket_path();
     let ipc_service = service.clone();
     tokio::spawn(async move {
         let server = NativeIpcServer::new(socket_path, ipc_service);
@@ -103,7 +104,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Setup Secret Service D-Bus interface
     let secret_service = SecretServiceDbus::new(service.clone());
     let prompt = Prompt {
-        path: zbus::zvariant::ObjectPath::from_static_str("/org/freedesktop/secrets/prompt/default").unwrap(),
+        path: zbus::zvariant::ObjectPath::from_static_str(
+            "/org/freedesktop/secrets/prompt/default",
+        )
+        .unwrap(),
     };
 
     let default_login_col = Collection {
@@ -116,8 +120,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .name("org.freedesktop.secrets")?
         .serve_at("/org/freedesktop/secrets", secret_service)?
         .serve_at("/org/freedesktop/secrets/prompt/default", prompt)?
-        .serve_at("/org/freedesktop/secrets/collection/login", default_login_col.clone())?
-        .serve_at("/org/freedesktop/secrets/aliases/default", default_login_col)?
+        .serve_at(
+            "/org/freedesktop/secrets/collection/login",
+            default_login_col.clone(),
+        )?
+        .serve_at(
+            "/org/freedesktop/secrets/aliases/default",
+            default_login_col,
+        )?
         .build()
         .await?;
 

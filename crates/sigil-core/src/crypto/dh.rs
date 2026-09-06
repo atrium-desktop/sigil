@@ -1,5 +1,5 @@
-use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use crate::domain::{Result, SecretBytes, SigilError};
+use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use hkdf::Hkdf;
 use num_bigint::{BigUint, RandBigInt};
 use rand::rngs::OsRng;
@@ -49,7 +49,9 @@ impl DhSession {
         let peer_public = BigUint::from_bytes_be(peer_public_bytes);
 
         if peer_public <= BigUint::from(1u32) || peer_public >= prime.clone() - 1u32 {
-            return Err(SigilError::CryptoFailure("Invalid peer DH public key".into()));
+            return Err(SigilError::CryptoFailure(
+                "Invalid peer DH public key".into(),
+            ));
         }
 
         let shared_secret_bn = peer_public.modpow(&self.private_key, &prime);

@@ -1,7 +1,5 @@
 use sigil_core::Result;
-use sigil_core::{
-    decrypt_secret_service_aes128, encrypt_secret_service_aes128,
-};
+use sigil_core::{decrypt_secret_service_aes128, encrypt_secret_service_aes128};
 use tracing::info;
 use zbus::interface;
 use zbus::zvariant::OwnedObjectPath;

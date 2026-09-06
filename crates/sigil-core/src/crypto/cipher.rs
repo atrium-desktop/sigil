@@ -1,20 +1,16 @@
+use crate::domain::{Result, SecretBytes, SigilError};
 use crate::key::MasterKey;
 use chacha20poly1305::{
     aead::{Aead, AeadCore, KeyInit, Payload},
     XChaCha20Poly1305, XNonce,
 };
-use crate::domain::{Result, SecretBytes, SigilError};
 use rand::rngs::OsRng;
 
 pub const NONCE_LEN: usize = 24;
 
 /// Encrypts `plaintext` using XChaCha20-Poly1305 under `key`.
 /// Returns `[24-byte nonce || ciphertext + 16-byte Poly1305 tag]`.
-pub fn encrypt_xchacha20poly1305(
-    key: &MasterKey,
-    plaintext: &[u8],
-    aad: &[u8],
-) -> Result<Vec<u8>> {
+pub fn encrypt_xchacha20poly1305(key: &MasterKey, plaintext: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
     let cipher = XChaCha20Poly1305::new_from_slice(key.as_bytes())
         .map_err(|e| SigilError::CryptoFailure(format!("Failed to initialize cipher: {e}")))?;
 
@@ -35,11 +31,7 @@ pub fn encrypt_xchacha20poly1305(
 }
 
 /// Decrypts `blob` formatted as `[24-byte nonce || ciphertext + 16-byte Poly1305 tag]` under `key`.
-pub fn decrypt_xchacha20poly1305(
-    key: &MasterKey,
-    blob: &[u8],
-    aad: &[u8],
-) -> Result<SecretBytes> {
+pub fn decrypt_xchacha20poly1305(key: &MasterKey, blob: &[u8], aad: &[u8]) -> Result<SecretBytes> {
     if blob.len() < NONCE_LEN + 16 {
         return Err(SigilError::CorruptData(format!(
             "Encrypted blob is too short: {} bytes (minimum {})",
@@ -59,9 +51,9 @@ pub fn decrypt_xchacha20poly1305(
         aad,
     };
 
-    let decrypted = cipher
-        .decrypt(nonce, payload)
-        .map_err(|_| SigilError::CryptoFailure("Decryption failed / MAC verification failed".into()))?;
+    let decrypted = cipher.decrypt(nonce, payload).map_err(|_| {
+        SigilError::CryptoFailure("Decryption failed / MAC verification failed".into())
+    })?;
 
     Ok(SecretBytes::new(decrypted))
 }

@@ -222,16 +222,18 @@ impl SecretServiceDbus {
                 let col_id = segments[4];
                 let item_id = segments[5];
                 if let Ok(record) = self.service.get_item(col_id, item_id).await {
-                    if let Ok((iv, enc_val)) = session.encrypt(&record.secret) {
-                        secrets.insert(
-                            item_path.clone(),
-                            SecretStruct {
-                                session: session_path.clone(),
-                                parameters: iv,
-                                value: enc_val,
-                                content_type: record.content_type,
-                            },
-                        );
+                    if let Ok(secret) = self.service.get_item_secret(col_id, item_id).await {
+                        if let Ok((iv, enc_val)) = session.encrypt(secret.as_slice()) {
+                            secrets.insert(
+                                item_path.clone(),
+                                SecretStruct {
+                                    session: session_path.clone(),
+                                    parameters: iv,
+                                    value: enc_val,
+                                    content_type: record.content_type,
+                                },
+                            );
+                        }
                     }
                 }
             }

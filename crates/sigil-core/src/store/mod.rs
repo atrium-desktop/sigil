@@ -30,7 +30,8 @@ mod tests {
                 id: "item1".into(),
                 label: "My Password".into(),
                 attributes: HashMap::from([("xdg:schema".into(), "login".into())]),
-                secret: b"super-secret-pw".to_vec(),
+                encrypted_secret: Vec::new(),
+                legacy_secret: Some(b"super-secret-pw".to_vec()),
                 content_type: "text/plain".into(),
                 created_at: 100,
                 modified_at: 100,
@@ -44,7 +45,16 @@ mod tests {
         assert_eq!(loaded.collections.len(), 1);
         assert_eq!(loaded.collections[0].items.len(), 1);
         assert_eq!(loaded.collections[0].items[0].label, "My Password");
-        assert_eq!(loaded.collections[0].items[0].secret, b"super-secret-pw");
+        assert!(loaded.collections[0].items[0].is_encrypted());
+
+        let item_key = crate::crypto::derive_item_key(&key, &loaded.collections[0].items[0].id);
+        let decrypted = crate::crypto::decrypt_xchacha20poly1305(
+            &item_key,
+            &loaded.collections[0].items[0].encrypted_secret,
+            b"",
+        )
+        .unwrap();
+        assert_eq!(decrypted.as_slice(), b"super-secret-pw");
 
         // Clean up
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -72,7 +82,8 @@ mod tests {
                 id: "secret1".into(),
                 label: "Bank Account".into(),
                 attributes: HashMap::new(),
-                secret: b"12345678".to_vec(),
+                encrypted_secret: vec![1, 2, 3, 4],
+                legacy_secret: None,
                 content_type: "text/plain".into(),
                 created_at: 200,
                 modified_at: 200,

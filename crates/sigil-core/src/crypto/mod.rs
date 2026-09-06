@@ -9,12 +9,12 @@ pub use dh::{
     decrypt_secret_service_aes128, encrypt_secret_service_aes128, DhSession, DH_GENERATOR,
     DH_PRIME_HEX,
 };
-pub use hkdf::derive_app_secret;
+pub use hkdf::{derive_app_secret, derive_item_key};
 pub use kdf::{
     decode_kdf, derive_key_argon2id, encode_kdf, generate_salt, KdfConfig, KdfParams,
     DEFAULT_SALT_LEN, KDF_FILE_VERSION, KDF_NAME,
 };
-pub use key::{MasterKey, MASTER_KEY_LEN};
+pub use key::{LockedKeyBox, MasterKey, MASTER_KEY_LEN};
 
 #[cfg(test)]
 mod tests {

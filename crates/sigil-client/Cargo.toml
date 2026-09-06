@@ -16,3 +16,5 @@ tracing = { workspace = true }
 [dev-dependencies]
 sigil-core = { path = "../sigil-core" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+zbus = { workspace = true }
+libc = { workspace = true }

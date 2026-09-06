@@ -30,3 +30,20 @@ pub fn derive_app_secret(
 
     SecretBytes::new(okm.to_vec())
 }
+
+/// Derives a dedicated 32-byte AEAD key for a specific item id.
+pub fn derive_item_key(master_key: &MasterKey, item_id: &str) -> MasterKey {
+    let mut info = Vec::with_capacity(14 + item_id.len());
+    info.extend_from_slice(b"sigil.item/v1\0");
+    info.extend_from_slice(item_id.as_bytes());
+
+    let hk = Hkdf::<Sha256>::from_prk(master_key.as_bytes())
+        .expect("MasterKey length is 32 bytes, which is valid for HKDF-SHA256 PRK");
+
+    let mut okm = [0u8; 32];
+    hk.expand(&info, &mut okm)
+        .expect("32 bytes is well within expansion limit");
+
+    MasterKey::new(okm)
+}
+

@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use zeroize::{Zeroize, ZeroizeOnDrop};
 
 pub const CURRENT_VAULT_VERSION: u32 = 2;
 
@@ -34,20 +33,25 @@ impl Default for VaultMeta {
     }
 }
 
-/// In-memory representation of an individual stored item in the vault.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+/// Format v2/v3 item representation with per-item AEAD encrypted secret.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredItem {
     pub id: String,
     pub label: String,
-    #[zeroize(skip)]
     pub attributes: HashMap<String, String>,
-    pub secret: Vec<u8>,
-    #[zeroize(skip)]
+    #[serde(default)]
+    pub encrypted_secret: Vec<u8>,
+    #[serde(default, rename = "secret", skip_serializing)]
+    pub legacy_secret: Option<Vec<u8>>,
     pub content_type: String,
-    #[zeroize(skip)]
     pub created_at: u64,
-    #[zeroize(skip)]
     pub modified_at: u64,
+}
+
+impl StoredItem {
+    pub fn is_encrypted(&self) -> bool {
+        !self.encrypted_secret.is_empty()
+    }
 }
 
 /// In-memory representation of a collection in the vault.

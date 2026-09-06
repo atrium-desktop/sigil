@@ -1,4 +1,7 @@
-use crate::crypto::{derive_app_secret, MasterKey};
+use crate::crypto::{
+    decrypt_xchacha20poly1305, derive_app_secret, derive_item_key, encrypt_xchacha20poly1305,
+    LockedKeyBox, MasterKey,
+};
 use crate::domain::{LockState, Namespace, Purpose, Result, SecretBytes, SigilError, Subject};
 use crate::store::{FileVaultStore, StoredCollection, StoredItem, StoredVaultData};
 use std::collections::HashMap;
@@ -20,7 +23,7 @@ pub struct ItemRecord {
     pub id: String,
     pub label: String,
     pub attributes: HashMap<String, String>,
-    pub secret: Vec<u8>,
+    pub encrypted_secret: Vec<u8>,
     pub content_type: String,
     pub created_at: u64,
     pub modified_at: u64,
@@ -35,7 +38,7 @@ pub struct CollectionRecord {
 
 pub struct ServiceInner {
     pub store: FileVaultStore,
-    pub master_key: Option<MasterKey>,
+    pub locked_key: Option<LockedKeyBox>,
     pub collections: HashMap<String, CollectionRecord>,
 }
 
@@ -60,7 +63,7 @@ impl SigilService {
         Self {
             inner: Arc::new(RwLock::new(ServiceInner {
                 store,
-                master_key: None,
+                locked_key: None,
                 collections,
             })),
         }
@@ -68,7 +71,7 @@ impl SigilService {
 
     pub async fn lock_state(&self) -> LockState {
         let inner = self.inner.read().await;
-        if inner.master_key.is_some() {
+        if inner.locked_key.is_some() {
             LockState::Unlocked
         } else if !inner.store.exists() {
             LockState::Uninitialized
@@ -81,19 +84,17 @@ impl SigilService {
 
     pub async fn is_locked(&self) -> bool {
         let inner = self.inner.read().await;
-        inner.master_key.is_none()
+        inner.locked_key.is_none()
     }
 
     pub async fn lock(&self) -> Result<()> {
         let mut inner = self.inner.write().await;
-        if let Some(mut key) = inner.master_key.take() {
-            key.zeroize();
-            info!("Master key cleared. Credential service locked.");
+        if inner.locked_key.take().is_some() {
+            info!("Master key cleared from LockedMemoryBox. Credential service locked.");
         }
-        // Zeroize in-memory secret items
         for col in inner.collections.values_mut() {
             for item in col.items.values_mut() {
-                item.secret.zeroize();
+                item.encrypted_secret.zeroize();
             }
             col.items.clear();
         }
@@ -114,7 +115,7 @@ impl SigilService {
                             id: item.id.clone(),
                             label: item.label.clone(),
                             attributes: item.attributes.clone(),
-                            secret: item.secret.clone(),
+                            encrypted_secret: item.encrypted_secret.clone(),
                             content_type: item.content_type.clone(),
                             created_at: item.created_at,
                             modified_at: item.modified_at,
@@ -140,8 +141,8 @@ impl SigilService {
                     items: HashMap::new(),
                 });
         }
-        inner.master_key = Some(key);
-        info!("Credential service successfully unlocked.");
+        inner.locked_key = Some(LockedKeyBox::new(&key));
+        info!("Credential service successfully unlocked (key memory-locked).");
         Ok(())
     }
 
@@ -186,14 +187,17 @@ impl SigilService {
         purpose: &Purpose,
     ) -> Result<SecretBytes> {
         let inner = self.inner.read().await;
-        let master_key = inner.master_key.as_ref().ok_or(SigilError::Locked)?;
+        let locked_key = inner.locked_key.as_ref().ok_or(SigilError::Locked)?;
 
-        Ok(derive_app_secret(
-            master_key,
-            namespace.as_str(),
-            subject.as_str(),
-            purpose.as_str(),
-        ))
+        locked_key.expose_key(|key_bytes| {
+            let key = MasterKey::new(*key_bytes);
+            Ok(derive_app_secret(
+                &key,
+                namespace.as_str(),
+                subject.as_str(),
+                purpose.as_str(),
+            ))
+        })
     }
 
     pub async fn get_collection_ids(&self) -> Vec<String> {
@@ -240,7 +244,7 @@ impl SigilService {
 
     pub async fn get_item(&self, collection_id: &str, item_id: &str) -> Result<ItemRecord> {
         let inner = self.inner.read().await;
-        if inner.master_key.is_none() {
+        if inner.locked_key.is_none() {
             return Err(SigilError::Locked);
         }
         let col = inner
@@ -251,6 +255,28 @@ impl SigilService {
             .get(item_id)
             .cloned()
             .ok_or_else(|| SigilError::NotFound(format!("Item {item_id} not found")))
+    }
+
+    /// Decrypts an individual secret on-demand strictly when requested.
+    /// Plaintext is never resident in daemon memory and is wiped on drop.
+    pub async fn get_item_secret(&self, collection_id: &str, item_id: &str) -> Result<SecretBytes> {
+        let inner = self.inner.read().await;
+        let locked_key = inner.locked_key.as_ref().ok_or(SigilError::Locked)?;
+        let col = inner
+            .collections
+            .get(collection_id)
+            .ok_or_else(|| SigilError::NotFound(format!("Collection {collection_id} not found")))?;
+        let item = col
+            .items
+            .get(item_id)
+            .ok_or_else(|| SigilError::NotFound(format!("Item {item_id} not found")))?;
+
+        locked_key.expose_key(|key_bytes| {
+            let volume_key = MasterKey::new(*key_bytes);
+            let item_key = derive_item_key(&volume_key, &item.id);
+            let decrypted = decrypt_xchacha20poly1305(&item_key, &item.encrypted_secret, b"")?;
+            Ok(decrypted)
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -265,9 +291,14 @@ impl SigilService {
         replace: bool,
     ) -> Result<()> {
         let mut inner = self.inner.write().await;
-        if inner.master_key.is_none() {
-            return Err(SigilError::Locked);
-        }
+        let locked_key = inner.locked_key.as_ref().ok_or(SigilError::Locked)?;
+
+        let encrypted_secret = locked_key.expose_key(|key_bytes| {
+            let volume_key = MasterKey::new(*key_bytes);
+            let item_key = derive_item_key(&volume_key, item_id);
+            encrypt_xchacha20poly1305(&item_key, secret, b"")
+        })?;
+
         let col = inner
             .collections
             .get_mut(collection_id)
@@ -282,7 +313,7 @@ impl SigilService {
             }
             existing.label = label.to_string();
             existing.attributes = attributes;
-            existing.secret = secret.to_vec();
+            existing.encrypted_secret = encrypted_secret;
             existing.content_type = content_type.to_string();
             existing.modified_at = now;
         } else {
@@ -292,7 +323,7 @@ impl SigilService {
                     id: item_id.to_string(),
                     label: label.to_string(),
                     attributes,
-                    secret: secret.to_vec(),
+                    encrypted_secret,
                     content_type: content_type.to_string(),
                     created_at: now,
                     modified_at: now,
@@ -306,7 +337,7 @@ impl SigilService {
 
     pub async fn delete_item(&self, collection_id: &str, item_id: &str) -> Result<()> {
         let mut inner = self.inner.write().await;
-        if inner.master_key.is_none() {
+        if inner.locked_key.is_none() {
             return Err(SigilError::Locked);
         }
         let col = inner
@@ -328,7 +359,7 @@ impl SigilService {
         attributes: &HashMap<String, String>,
     ) -> Result<Vec<(String, String)>> {
         let inner = self.inner.read().await;
-        if inner.master_key.is_none() {
+        if inner.locked_key.is_none() {
             return Err(SigilError::Locked);
         }
 
@@ -353,8 +384,8 @@ impl SigilService {
     }
 
     fn save_locked(&self, inner: &mut ServiceInner) -> Result<()> {
-        let master_key = match inner.master_key.as_ref() {
-            Some(k) => k,
+        let master_key = match inner.locked_key.as_ref() {
+            Some(k) => k.to_master_key(),
             None => return Ok(()), // Not yet unlocked, don't write empty
         };
 
@@ -366,7 +397,8 @@ impl SigilService {
                     id: item.id.clone(),
                     label: item.label.clone(),
                     attributes: item.attributes.clone(),
-                    secret: item.secret.clone(),
+                    encrypted_secret: item.encrypted_secret.clone(),
+                    legacy_secret: None,
                     content_type: item.content_type.clone(),
                     created_at: item.created_at,
                     modified_at: item.modified_at,
@@ -384,6 +416,6 @@ impl SigilService {
             collections: collections_data,
         };
 
-        inner.store.save(master_key, &vault_data)
+        inner.store.save(&master_key, &vault_data)
     }
 }

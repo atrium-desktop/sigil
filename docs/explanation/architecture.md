@@ -7,11 +7,12 @@ It provides a fully compliant `org.freedesktop.secrets` Secret Service API imple
 
 Historically, desktop credential management forced a trade-off between user friction (constant popups, separate passwords, manual CLI initializations) and security compromises (plaintext keyfiles, resident secrets during away-from-desk, desynchronization upon password change).
 
-`sigil` eliminates this dichotomy through four core architectural pillars:
-1. **Envelope Multi-Slot Storage**: The vault payload is encrypted by a dedicated 256-bit `VolumeKey`, which is sealed into independent key slots (system login password, recovery paper key, TPM2 enclaves). Password changes are instant and isolated from bulk data.
-2. **Race-Free Socket Activation**: Managed via systemd user socket activation (`sigil.socket`), eliminating chicken-and-egg timing races between PAM and daemon startup.
-3. **Session-Bound Key Eviction**: Dual-trigger logind monitoring clears sensitive keys on screen lock, seat deactivation (`Active=false`), and user switching.
-4. **Self-Healing Synchronization**: Native `pam_sm_chauthtok` hooks and recovery prompt channels gracefully absorb both user and administrator password resets.
+`sigil` eliminates this dichotomy through five core architectural pillars:
+1. **Dual-Sovereign Architecture**: Decouples sandboxed zero-trust application isolation (stateless mathematical HKDF derivation via `org.freedesktop.portal.Secret`) from native host collaboration (per-item AEAD credential broker via `org.freedesktop.secrets`).
+2. **Envelope Multi-Slot Storage**: The vault payload is encrypted by a dedicated, immutable 256-bit `VolumeKey`, which is sealed into independent key slots (system login password, recovery paper key, TPM2 enclaves). Password changes are instant $O(1)$ operations and completely isolated from application secret stability.
+3. **Decrypt-on-Demand & Zero Plaintext Resident Memory**: Plaintext secrets are never bulk-loaded into process memory. Credentials are decrypted on the stack strictly when queried and zeroized immediately upon transmission.
+4. **Race-Free Socket Activation**: Managed via systemd user socket activation (`sigil.socket`), eliminating chicken-and-egg timing races between PAM and daemon startup.
+5. **Session-Bound Key Eviction & Zero-Allocation IPC**: Dual-trigger logind monitoring clears sensitive keys on screen lock, seat deactivation (`Active=false`), and user switching. Native IPC utilizes fixed-size stack buffers (`sigil-wire-v2`) eliminating heap fragmentation.
 
 ```text
                       Native Desktop Apps                         Sandboxed Flatpak / Snap Apps

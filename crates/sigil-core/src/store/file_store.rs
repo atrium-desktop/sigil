@@ -1,7 +1,7 @@
 use crate::model::{StoredVaultData, VaultMeta};
 use crate::domain::{Result, SigilError};
 use crate::crypto::{
-    decode_kdf, decrypt_xchacha20poly1305, derive_key_argon2id, encode_kdf,
+    decode_kdf, decrypt_xchacha20poly1305, derive_item_key, derive_key_argon2id, encode_kdf,
     encrypt_xchacha20poly1305, generate_salt, KdfParams, MasterKey, DEFAULT_SALT_LEN,
 };
 use std::fs::{self, File, OpenOptions};
@@ -361,10 +361,29 @@ impl FileVaultStore {
         file.read_to_end(&mut encrypted_bytes)?;
 
         let mut decrypted_secret = decrypt_xchacha20poly1305(volume_key, &encrypted_bytes, b"")?;
-        let data: StoredVaultData = serde_json::from_slice(decrypted_secret.as_slice())
+        let mut data: StoredVaultData = serde_json::from_slice(decrypted_secret.as_slice())
             .map_err(|e| SigilError::CorruptData(format!("JSON deserialization failed: {e}")))?;
 
         decrypted_secret.zeroize();
+
+        // Migrate any unencrypted legacy items to per-item AEAD encryption
+        let mut migrated = false;
+        for col in &mut data.collections {
+            for item in &mut col.items {
+                if let Some(mut plain) = item.legacy_secret.take() {
+                    let item_key = derive_item_key(volume_key, &item.id);
+                    let enc = encrypt_xchacha20poly1305(&item_key, &plain, b"")?;
+                    plain.zeroize();
+                    item.encrypted_secret = enc;
+                    migrated = true;
+                }
+            }
+        }
+        if migrated {
+            self.save(volume_key, &data)?;
+            info!("Successfully upgraded vault items to per-item AEAD envelope.");
+        }
+
         Ok(data)
     }
 
@@ -372,7 +391,20 @@ impl FileVaultStore {
     pub fn save(&self, volume_key: &MasterKey, data: &StoredVaultData) -> Result<()> {
         ensure_secure_dir(&self.dir)?;
 
-        let mut json_bytes = serde_json::to_vec(data)
+        let mut data_to_save = data.clone();
+        for col in &mut data_to_save.collections {
+            for item in &mut col.items {
+                if item.encrypted_secret.is_empty() {
+                    if let Some(mut plain) = item.legacy_secret.take() {
+                        let item_key = derive_item_key(volume_key, &item.id);
+                        item.encrypted_secret = encrypt_xchacha20poly1305(&item_key, &plain, b"")?;
+                        plain.zeroize();
+                    }
+                }
+            }
+        }
+
+        let mut json_bytes = serde_json::to_vec(&data_to_save)
             .map_err(|e| SigilError::StorageFailure(format!("JSON serialization failed: {e}")))?;
 
         let encrypted = encrypt_xchacha20poly1305(volume_key, &json_bytes, b"")?;

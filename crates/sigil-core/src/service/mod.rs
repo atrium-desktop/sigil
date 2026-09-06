@@ -62,7 +62,8 @@ mod tests {
 
         let item = service.get_item("login", "item-1").await.unwrap();
         assert_eq!(item.label, "Test Label");
-        assert_eq!(item.secret, b"my-password");
+        let secret = service.get_item_secret("login", "item-1").await.unwrap();
+        assert_eq!(secret.as_slice(), b"my-password");
 
         // Search
         let matches = service
@@ -123,7 +124,9 @@ mod tests {
         service.unlock_with_password("my-new-pwd").await.unwrap();
         assert_eq!(service.lock_state().await, LockState::Unlocked);
         let item = service.get_item("login", "vault-secret").await.unwrap();
-        assert_eq!(item.secret, b"confidential-data");
+        assert_eq!(item.label, "My Secret");
+        let secret = service.get_item_secret("login", "vault-secret").await.unwrap();
+        assert_eq!(secret.as_slice(), b"confidential-data");
 
         // Simulate desync
         service.lock().await.unwrap();

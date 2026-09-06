@@ -46,8 +46,14 @@ impl Item {
             .await
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
+        let secret = self
+            .service
+            .get_item_secret(&self.collection_id, &self.item_id)
+            .await
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
         let (iv, enc_val) = session
-            .encrypt(&record.secret)
+            .encrypt(secret.as_slice())
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
         Ok(SecretStruct {
@@ -113,13 +119,19 @@ impl Item {
             .await
             .map_err(|e| zbus::Error::FDO(Box::new(zbus::fdo::Error::Failed(e.to_string()))))?;
 
+        let secret = self
+            .service
+            .get_item_secret(&self.collection_id, &self.item_id)
+            .await
+            .map_err(|e| zbus::Error::FDO(Box::new(zbus::fdo::Error::Failed(e.to_string()))))?;
+
         self.service
             .set_item(
                 &self.collection_id,
                 &self.item_id,
                 &new_label,
                 record.attributes,
-                &record.secret,
+                secret.as_slice(),
                 &record.content_type,
                 true,
             )
@@ -146,13 +158,19 @@ impl Item {
             .await
             .map_err(|e| zbus::Error::FDO(Box::new(zbus::fdo::Error::Failed(e.to_string()))))?;
 
+        let secret = self
+            .service
+            .get_item_secret(&self.collection_id, &self.item_id)
+            .await
+            .map_err(|e| zbus::Error::FDO(Box::new(zbus::fdo::Error::Failed(e.to_string()))))?;
+
         self.service
             .set_item(
                 &self.collection_id,
                 &self.item_id,
                 &record.label,
                 new_attrs,
-                &record.secret,
+                secret.as_slice(),
                 &record.content_type,
                 true,
             )

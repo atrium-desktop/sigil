@@ -74,3 +74,65 @@ impl fmt::Debug for MasterKey {
         write!(f, "MasterKey([redacted])")
     }
 }
+
+/// A secure, memory-locked container holding the MasterKey.
+/// Uses `mlock(2)` to prevent swapping to disk and `MADV_DONTDUMP` to keep material out of coredumps.
+pub struct LockedKeyBox {
+    ptr: *mut u8,
+    page_size: usize,
+}
+
+unsafe impl Send for LockedKeyBox {}
+unsafe impl Sync for LockedKeyBox {}
+
+impl LockedKeyBox {
+    pub fn new(key: &MasterKey) -> Self {
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
+        let page_size = if page_size == 0 { 4096 } else { page_size };
+
+        let ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                page_size,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                -1,
+                0,
+            ) as *mut u8
+        };
+
+        if ptr == libc::MAP_FAILED as *mut u8 || ptr.is_null() {
+            panic!("Failed to allocate mmap page for LockedKeyBox");
+        }
+
+        unsafe {
+            let _ = libc::mlock(ptr as *const libc::c_void, page_size);
+            let _ = libc::madvise(ptr as *mut libc::c_void, page_size, libc::MADV_DONTDUMP);
+            std::ptr::copy_nonoverlapping(key.as_bytes().as_ptr(), ptr, MASTER_KEY_LEN);
+        }
+
+        Self { ptr, page_size }
+    }
+
+    pub fn expose_key<R>(&self, f: impl FnOnce(&[u8; MASTER_KEY_LEN]) -> R) -> R {
+        let slice = unsafe { &*(self.ptr as *const [u8; MASTER_KEY_LEN]) };
+        f(slice)
+    }
+
+    pub fn to_master_key(&self) -> MasterKey {
+        self.expose_key(|k| MasterKey::new(*k))
+    }
+}
+
+impl Drop for LockedKeyBox {
+    fn drop(&mut self) {
+        if !self.ptr.is_null() && self.ptr != libc::MAP_FAILED as *mut u8 {
+            unsafe {
+                std::ptr::write_bytes(self.ptr, 0, self.page_size);
+                let _ = libc::munlock(self.ptr as *const libc::c_void, self.page_size);
+                let _ = libc::munmap(self.ptr as *mut libc::c_void, self.page_size);
+            }
+        }
+    }
+}
+

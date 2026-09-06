@@ -1,6 +1,6 @@
 [package]
 name = "sigil-core"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Sigil Project"]
 description = "Core cryptographic engine, envelope multi-slot vault store, and lifecycle service for sigil"

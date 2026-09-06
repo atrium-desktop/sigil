@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.7] - 2026-09-08
+
+### Architecture & Security (ADR-0004)
+- **Dual-Sovereign Architecture**: Formally decoupled stateless sandboxed application derivation (Portal Track via `org.freedesktop.portal.Secret`) from native host credential management (Keyring Track via `org.freedesktop.secrets`).
+- **sigil-wire-v2 Binary Protocol**: Completely purged dynamic JSON serialization across native IPC. Adopted rigid 8-byte fixed-alignment binary framing with stack-allocated buffers, eliminating heap fragmentation and transient secret remnants.
+- **Per-Item AEAD Envelope & Decrypt-on-Demand**: Refactored `FileVaultStore` and `SigilService` to encrypt every credential item with an individual derived subkey (`derive_item_key`). Secrets are decrypted on-demand strictly when requested and wiped immediately upon transmission, ensuring zero plaintext secrets remain resident in daemon memory while unlocked.
+- **LockedMemoryBox**: Sealed the 256-bit `VolumeKey` within a private, memory-locked 4KB page (`mmap` + `mlock` + `MADV_DONTDUMP`), with sub-microsecond zeroization upon `systemd-logind` session lock or seat deactivation.
+
 ## [1.3.6] - 2026-09-08
 
 ### Security & Architecture (ADR-0003)

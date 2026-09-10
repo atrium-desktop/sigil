@@ -87,7 +87,33 @@ impl Collection {
             .decrypt(&secret.parameters, &secret.value)
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
-        let item_id = format!("i_{}", rand::thread_rng().next_u64());
+        // Per the Secret Service spec, when `replace` is set the service must
+        // replace an item that already has the same attribute values instead of
+        // creating a duplicate. Reuse the first exact match and drop any other
+        // duplicates that a previous buggy implementation may have left behind.
+        let mut existing_id: Option<String> = None;
+        if replace {
+            if let Ok(matches) = self.service.search_items(Some(&self.id), &attributes).await {
+                for (col_id, item_id) in matches {
+                    if col_id != self.id {
+                        continue;
+                    }
+                    let Ok(record) = self.service.get_item(&col_id, &item_id).await else {
+                        continue;
+                    };
+                    if record.attributes != attributes {
+                        continue;
+                    }
+                    if existing_id.is_none() {
+                        existing_id = Some(item_id);
+                    } else {
+                        let _ = self.service.delete_item(&col_id, &item_id).await;
+                    }
+                }
+            }
+        }
+
+        let item_id = existing_id.unwrap_or_else(|| format!("i_{}", rand::thread_rng().next_u64()));
 
         self.service
             .set_item(
@@ -97,7 +123,7 @@ impl Collection {
                 attributes,
                 &plain_bytes,
                 &secret.content_type,
-                replace,
+                true,
             )
             .await
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;

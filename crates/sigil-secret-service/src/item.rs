@@ -31,7 +31,16 @@ impl Item {
         Ok(ObjectPath::from_static_str("/").unwrap())
     }
 
-    async fn get_secret(&self, session_path: OwnedObjectPath) -> zbus::fdo::Result<SecretStruct> {
+    // zbus treats the return type of a method as the tuple of D-Bus output
+    // arguments. Returning a bare struct therefore serialises its fields as
+    // separate out-args (`oayays`), which is not what the Secret Service spec
+    // requires. Wrapping it in a one-element tuple forces a single STRUCT
+    // (`(oayays)`) on the wire, as mandated by the spec and expected by
+    // libsecret/godbus clients such as gh's go-keyring.
+    async fn get_secret(
+        &self,
+        session_path: OwnedObjectPath,
+    ) -> zbus::fdo::Result<(SecretStruct,)> {
         let sessions = self.sessions.read().await;
         let session = sessions
             .get(&session_path)
@@ -53,12 +62,12 @@ impl Item {
             .encrypt(secret.as_slice())
             .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
 
-        Ok(SecretStruct {
+        Ok((SecretStruct {
             session: session_path,
             parameters: iv,
             value: enc_val,
             content_type: record.content_type,
-        })
+        },))
     }
 
     async fn set_secret(&self, secret: SecretStruct) -> zbus::fdo::Result<()> {

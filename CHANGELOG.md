@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.9] - 2026-09-10
+
+### Fixed
+- **Secret Service `Item.GetSecret` wire format**: The reply is once again the single `Secret` STRUCT (`(oayays)`) mandated by the specification. zbus was flattening the bare struct return into four separate output arguments, so strict clients such as libsecret and `gh`'s go-keyring/godbus failed to decode the reply (`dbus.Store: length mismatch`) and reported the stored credential as invalid.
+- **`Collection.CreateItem` replace semantics**: `replace=true` now replaces an existing item with identical attributes instead of creating a duplicate, and prunes duplicates left behind by earlier versions.
+
+### Build
+- Adopted Optics `v0.0.37`.
+
 ## [1.3.8] - 2026-09-08
 
 ### CLI & Usability

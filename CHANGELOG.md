@@ -2,10 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.3.10] - 2026-09-28
 
 ### Build
 - Adopted Optics `v0.0.52` (unified monorepo identity to glyph, vista, and transit via ADR-0106; global lockstep versioning across all bindings).
+
+### Documentation
+- Aligned documentation governance standard to Protocol v0.0.5 directives (`.docgov.yml`, `.docgov.lock`, `AGENTS.md`, and ADR frontmatter metadata).
 
 ## [1.3.9] - 2026-09-10
 

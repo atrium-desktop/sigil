@@ -1,8 +1,8 @@
-# Architecture Decision Records (ADRs)
+# Architecture Decision Records
 
-| ID | Title | Status | Date |
-|---|---|---|---|
-| [ADR-0001](0001-zero-compromise-memory-first-security-architecture.md) | Zero-Compromise Memory-First Security Architecture | Accepted (Superseded in part by ADR-0002) | 2026-09-04 |
-| [ADR-0002](0002-industrial-grade-zero-friction-desktop-lifecycle-and-envelope-vault.md) | Industrial-Grade Zero-Friction Desktop Lifecycle and Envelope Vault Architecture | Accepted | 2026-09-08 |
-| [ADR-0003](0003-clean-break-secret-derivation-and-memory-zeroization.md) | Clean-Break Secret Derivation and Memory Zeroization Standard | Accepted | 2026-09-08 |
-| [ADR-0004](0004-dual-sovereign-architecture-and-zero-compromise-hardening.md) | Dual-Sovereign Architecture: Decoupled Stateless Portal Derivation, Zero-Allocation Wire Protocol, and Per-Item Keyring Vault | Accepted | 2026-09-08 |
+| ID | Title | Status | Scope | Decision Summary & Primary Invariant | Date |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| [0001](0001-zero-compromise-memory-first-security-architecture.md) | Zero-Compromise Memory-First Security Architecture | Accepted (Superseded in part by ADR-0002) | `core/security` | Eliminate file-based plaintext transit via direct socket IPC; harden process memory (`PR_SET_DUMPABLE=0`, `RLIMIT_CORE=0`); passwords never touch disk. | 2026-09-04 |
+| [0002](0002-industrial-grade-zero-friction-desktop-lifecycle-and-envelope-vault.md) | Industrial-Grade Zero-Friction Desktop Lifecycle and Envelope Vault Architecture | Accepted | `desktop/lifecycle` | Adopt LUKS2-style envelope key-slots and systemd user socket activation; tie master key lifetime to session seat with instant zeroization on lock/switch/suspend. | 2026-09-08 |
+| [0003](0003-clean-break-secret-derivation-and-memory-zeroization.md) | Clean-Break Secret Derivation and Memory Zeroization Standard | Accepted | `crypto/derivation` | Enforce clean-break HKDF-SHA256 derivation under `atrium.portal.Secret/v1` namespace; wrap all IPC secret wire payloads in `SecretBytes` with zeroize-on-drop. | 2026-09-08 |
+| [0004](0004-dual-sovereign-architecture-and-zero-compromise-hardening.md) | Dual-Sovereign Architecture: Decoupled Stateless Portal Derivation, Zero-Allocation Wire Protocol, and Per-Item Keyring Vault | Accepted | `core/architecture` | Dual-sovereign split: decoupled stateless portal HKDF derivation for sandboxed apps vs. per-item encrypted keyring for host tools; zero-allocation binary IPC protocol. | 2026-09-08 |

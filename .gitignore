@@ -16,7 +16,6 @@
 .muta/
 
 # AI assistant instruction files (per-developer, not shared)
-/AGENTS.md
 /CLAUDE.md
 /GEMINI.md
 

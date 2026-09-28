@@ -1,3 +1,10 @@
+---
+id: ADR-0004
+title: "Dual-Sovereign Architecture: Decoupled Stateless Portal Derivation, Zero-Allocation Wire Protocol, and Per-Item Keyring Vault"
+status: accepted
+date: 2026-09-08
+---
+
 # ADR-0004: Dual-Sovereign Architecture: Decoupled Stateless Portal Derivation, Zero-Allocation Wire Protocol, and Per-Item Keyring Vault
 
 - **Status**: Accepted

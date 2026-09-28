@@ -1,45 +1,78 @@
-# Repository Contracts
+# Repository Contracts (Protocol v6.0.0)
 
-Reference data and bindings for documentation surfaces adopted by this
-repository.
-
-For adoption procedures, see [Adoption](core/adoption.md).
+Reference data, profile declarations, and configuration bindings for repositories adopting Protocol v6.0.0.
 
 ---
 
 ## 1. Activated Profiles
 
-Declare the domain profiles active in this repository. `tools/sync.sh` and
-`tools/verify.sh` use this list to assemble and verify documentation surfaces.
+Declare the domain capability profiles active in this repository. Toolchains use this declaration to assemble and verify documentation surfaces:
 
-- [x] `core` (Mandatory: universal routing, writing style, checklists, patterns)
-- [x] `validation` (Product validation: acceptance, testing)
-- [x] `architecture` (Architecture decision records: ADR lifecycle)
-- [ ] `operations` (Operational knowledge layering: runbook triage, postmortems)
-
----
-
-## 2. Directory Layout Bindings
-
-| Surface | Path | Required | Purpose |
-|---------|------|----------|---------|
-| Core Governance | `docs/governance/documentation/` | Yes | Mirrored governance standard |
-| Top-level Governance | `docs/governance/` | Yes | Repository charters and guidelines |
-| Contributor Firewall | `docs/dev/` | Yes | Developer setup, testing, and procedures |
-| Architecture Records | `docs/adr/` | If `architecture` active | Immutable Architecture Decision Records |
-| Incident Records | `docs/dev/postmortems/` | If `operations` active | Post-incident analysis records |
-| Root Entry | `README.md` | Yes | Pitch and shortest successful start path |
-| Documentation Entry | `docs/index.md` | Yes | Documentation entry point |
+- [x] `core` (Mandatory: 4D spatial taxonomy, system invariants, operational workflow, style)
+- [x] `architecture` (Architecture records, living blueprints, pre-decision RFCs)
+- [x] `validation` (Product validation: user journeys, acceptance matrices, testing guides)
+- [ ] `operations` (Operational knowledge: postmortems, triage runbooks)
 
 ---
 
-## 3. Optional Document Contracts
+## 2. Declarative Contract Schema (`/.docgov.yml`)
 
-| Contract | Active Condition | If Present | If Absent |
-|----------|------------------|------------|-----------|
-| `CHANGELOG.md` | Universal | User-visible changes update it in the same PR | Omit changelog checks from review |
-| `CONTRIBUTING.md` | Universal | Contributor workflow links to `docs/dev/` | Add before accepting outside contributions |
-| `docs/dev/acceptance.md` | Profile `validation` | User journeys or acceptance criteria changes update it | Rely on developer testing guides |
-| `docs/dev/testing.md` | Profile `validation` | Test command or suite changes update it | Document testing in setup guide |
-| `docs/adr/index.md` | Profile `architecture` | New ADRs registered upon acceptance | Create index before adding ADRs |
-| `docs/reference/glossary.md` | Universal | New canonical terms update it | Keep definitions local to document |
+In Protocol v6.0.0, repository contracts and profiles are configured via `/.docgov.yml` at the repository root:
+
+```yaml
+version: "6.0"
+
+# [INV-LINT-01] Root Location Sanitization
+root_sanitization:
+  enforce: true
+  allowed_markdown:
+    - "README.md"
+    - "CHANGELOG.md"
+    - "CONTRIBUTING.md"
+    - "AGENTS.md"
+    - "LICENSE.md"
+    - "SECURITY.md"
+
+# [INV-LINT-02] Contributor Firewall Bindings
+firewall:
+  public_surfaces:
+    - "docs/tutorials/**"
+    - "docs/how-to/**"
+    - "docs/reference/**"
+    - "docs/explanation/**"
+  internal_surfaces:
+    - "docs/dev/**"
+
+# [INV-LINT-03] Architecture & Metadata Profile
+architecture:
+  adr_path: "docs/adr"
+  require_frontmatter:
+    status_enum: ["draft", "accepted", "superseded", "rejected", "deprecated"]
+    mandatory_fields: ["id", "title", "status", "date"]
+
+# [INV-LINT-04] Code-to-Doc Trigger Bindings
+triggers:
+  - watch: "src/api/**"
+    require_update: "docs/reference/**"
+    message: "Public API modified; docs/reference/ must be synchronized in the same commit."
+  - watch: "src/cli/**"
+    require_update: "docs/how-to/**"
+    message: "CLI syntax changed; docs/how-to/ must be synchronized in the same commit."
+```
+
+---
+
+## 3. Directory Layout Bindings
+
+| Surface | Path | Required | Temperature | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **Top Control Plane** | `.docgov.yml` | Yes | **HOT** | Declarative governance rules & triggers |
+| **AI Directives** | `AGENTS.md` | Yes | **HOT** | Machine & cognitive invariant mapping (< 30 lines) |
+| **Public Tutorials** | `docs/tutorials/` | Optional | **HOT** | Guided learning from zero |
+| **Public How-To** | `docs/how-to/` | Optional | **HOT** | Practical recipes for real tasks |
+| **Public Reference** | `docs/reference/` | Optional | **HOT** | Authoritative technical & API specifications |
+| **Public Explanation**| `docs/explanation/`| Optional | **HOT** | Architectural context & domain concepts |
+| **Contributor Surface**| `docs/dev/` | Yes | **HOT** | Internal setup, testing, and procedures |
+| **ADR Registry** | `docs/adr/` | If Architecture | **WARM** / **COLD** | Decisions evolved in-place via Frontmatter |
+| **Incident Reviews** | `docs/dev/postmortems/`| If Operations | **COLD** | Blameless analysis of past incidents |
+| **Root Entry** | `README.md` | Yes | **HOT** | Project value pitch and shortest setup |

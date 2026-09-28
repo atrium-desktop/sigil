@@ -1,3 +1,10 @@
+---
+id: ADR-0002
+title: "Industrial-Grade Zero-Friction Desktop Lifecycle and Envelope Vault Architecture"
+status: accepted
+date: 2026-09-08
+---
+
 # ADR-0002: Industrial-Grade Zero-Friction Desktop Lifecycle and Envelope Vault Architecture
 
 - **Status**: Accepted

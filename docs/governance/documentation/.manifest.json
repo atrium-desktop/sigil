@@ -2,40 +2,64 @@
   "schema": "docs-governance/manifest",
   "schema_version": 2,
   "name": "docs-governance",
-  "description": "Modular documentation governance: micro-core protocol with pluggable domain profiles.",
+  "description": "Universal documentation governance: semantic coordinate tensor core with pluggable vertical domain entities.",
   "license": "MIT",
   "homepage": "https://github.com/ming/docs-governance",
-  "protocol_version": "3.1.0",
+  "protocol_version": "6.0.0",
   "protocol_history": [
+    {
+      "version": "6.0.0",
+      "date": "2026-08-25",
+      "status": "current",
+      "summary": "Protocol v6.0.0 Clean Break: Zero-Vendoring Architecture, Flat Knowledge Topology, in-place Frontmatter lifecycle, and bifurcated invariants (INV-LINT machine layer and INV-AGENT cognitive layer)."
+    },
+    {
+      "version": "5.1.0",
+      "date": "2026-08-25",
+      "status": "superseded",
+      "summary": "Standardize Decision Summary and Primary Invariant column in ADR registry index pattern."
+    },
+    {
+      "version": "5.0.0",
+      "date": "2026-08-25",
+      "status": "superseded",
+      "summary": "Clean-Break Architecture: Universal Semantic Tensor Core (taxonomy, invariants, workflow, style) and pluggable vertical domain entities (ADR, RFC, Living Snapshot, Acceptance, Testing, Postmortem)."
+    },
+    {
+      "version": "4.0.0",
+      "date": "2026-08-25",
+      "status": "superseded",
+      "summary": "Transitional reorganization to spec directory."
+    },
+    {
+      "version": "3.2.0",
+      "date": "2026-08-25",
+      "status": "superseded",
+      "summary": "Enhance Architecture profile with Log vs Snapshot duality, RFC vs ADR separation of concerns, and ADR compaction pattern."
+    },
     {
       "version": "3.1.0",
       "date": "2026-08-25",
-      "status": "current",
-      "summary": "Streamline Product Validation profile to dual-tier model (acceptance.md and testing.md), converging scenarios and edge cases into acceptance scenario matrices and test fixtures."
+      "status": "superseded",
+      "summary": "Streamline Product Validation profile to dual-tier model (acceptance.md and testing.md)."
     },
     {
       "version": "3.0.0",
       "date": "2026-08-24",
       "status": "superseded",
-      "summary": "Modular Governance Architecture: micro-core protocol (routing, style, checklists, common patterns, intake SOP) decoupled from pluggable domain profiles (validation, architecture, operations); contract-driven assembly via contracts.md."
-    },
-    {
-      "version": "2.1.0",
-      "date": "2026-08-24",
-      "status": "superseded",
-      "summary": "Product validation standard: acceptance.md (journeys), experience_scenarios.md (experiences), and testing.md (implementation) three-tier model."
+      "summary": "Modular Governance Architecture: micro-core protocol decoupled from pluggable domain profiles."
     },
     {
       "version": "2.0.0",
       "date": "2026-08-23",
       "status": "superseded",
-      "summary": "Three routing gates (time, audience, cognitive mode) with root-files exception; repository contracts split from adoption; knowledge-layers page; postmortem workflow in update/review checklists; manifest for drift detection."
+      "summary": "Three routing gates with root-files exception and manifest for drift detection."
     },
     {
       "version": "1.0.0",
       "date": "2026-06-13",
       "status": "superseded",
-      "summary": "Flat Diataxis decision list, adoption held repository contracts, common-docs pattern library, AGENTS.md maintainer rule."
+      "summary": "Initial flat Diataxis decision list."
     }
   ],
   "update_policy": "Semantic versioning on protocol_version. MAJOR: a repository following the old protocol would be non-compliant without migration work. MINOR: new optional profiles or non-breaking additions; old content stays valid. PATCH: clarifications and typo-level changes that do not alter any rule.",
@@ -44,7 +68,7 @@
       "role": "guard",
       "profile": "core",
       "editable": false,
-      "sha256": "2a0eb6a9125825e5c5232d35fa41bdbee8c1a192b9843624fe08f666b4b063e9"
+      "sha256": "f0ac07a502a783817c9261a250765b5b8e6bda5099d1ee663418163b9db9b67c"
     },
     "contracts.md": {
       "role": "template",
@@ -52,121 +76,89 @@
       "editable": true,
       "sha256": ""
     },
-    "core/adoption.md": {
-      "role": "guide",
-      "profile": "core",
-      "editable": false,
-      "sha256": "cfc5206025d6e4d2aef2fd428ce3fcf375058779cd8224a4ceba3f1e0a4af943"
-    },
-    "core/common-patterns.md": {
-      "role": "library",
-      "profile": "core",
-      "editable": false,
-      "sha256": "db8dc1ec7577e10d356aa1348dd34e5db2345378d7873e236290533ea4129766"
-    },
     "core/index.md": {
+      "role": "charter",
+      "profile": "core",
+      "editable": false,
+      "sha256": "64013eec2ac263814a9275668be68bf0b69ffebb94d5eac03dd2ea593a32497e"
+    },
+    "core/invariants.md": {
+      "role": "constitution",
+      "profile": "core",
+      "editable": false,
+      "sha256": "1dc779f7655bb529ee465c956d886af813185795ad91b07c422aa1e6fbb04ba8"
+    },
+    "core/style.md": {
       "role": "guide",
       "profile": "core",
       "editable": false,
-      "sha256": "80afc7ea5ba08cf4f7c9005e5ec59c93365e5f26abda04901d94f155f74e353d"
+      "sha256": "71fabafd58a8c860f16a7a4c65bb31eb42f40c361bc26d597a7edde387552a90"
     },
-    "core/intake-sop.md": {
-      "role": "guide",
+    "core/taxonomy.md": {
+      "role": "tensor",
       "profile": "core",
       "editable": false,
-      "sha256": "a505bcaac4a89f15731305262d418693a2b54c1355c97f772d5ca791cacb2f96"
+      "sha256": "06be77ebd061eaf739273802317b5cda41e7160e5dc16fb80b3d9d7bbc732e6e"
     },
-    "core/review-checklist.md": {
-      "role": "checklist",
+    "core/workflow.md": {
+      "role": "lifecycle",
       "profile": "core",
       "editable": false,
-      "sha256": "f90d0936b9ac132a04267251a80bd19b541cdb1b49f598d730f2e186a60003ef"
+      "sha256": "bba4f7fc3fba2f75d24c218e8a7533a1abdfb698cb55fce404dfe07a46873414"
     },
-    "core/routing.md": {
-      "role": "guide",
-      "profile": "core",
-      "editable": false,
-      "sha256": "8d55238b1e27e3d51ca5552ac76919a1a934e132da9ed35fb0d599b2e70b0978"
-    },
-    "core/style-guide.md": {
-      "role": "guide",
-      "profile": "core",
-      "editable": false,
-      "sha256": "714af3d4ae9f5ef0d570a633d92ba1d2f53355c93f281622520a40e2ad71aab2"
-    },
-    "core/update-checklist.md": {
-      "role": "checklist",
-      "profile": "core",
-      "editable": false,
-      "sha256": "1e16400df1c2c9924d057d3816aa1864822cf1566e4fa3966cfbf6a100d4b5af"
-    },
-    "profiles/architecture/adr.pattern.md": {
-      "role": "pattern",
+    "profiles/architecture/adr.md": {
+      "role": "entity",
       "profile": "architecture",
       "editable": false,
-      "sha256": "adf48c8cb7013845a19b77e2c6eee84290c1213f55950fd9dde2fe8fa90b205c"
+      "sha256": "d259e2a8bb45c15cafdda34368a5f8565687e57e4891f5aff830f8db38594171"
     },
-    "profiles/architecture/profile.md": {
-      "role": "guide",
+    "profiles/architecture/index.md": {
+      "role": "charter",
       "profile": "architecture",
       "editable": false,
-      "sha256": "dd0258a08ba24b3507d55ba7e8f0d8d2c4efda8a03dd763ef5a8b6c5da04dd7a"
+      "sha256": "16431fad3816959b053c9e7d8f2073febdfbf389b06286d1f1b3805bfb0c6936"
     },
-    "profiles/operations/postmortem.pattern.md": {
-      "role": "pattern",
+    "profiles/architecture/living-snapshot.md": {
+      "role": "entity",
+      "profile": "architecture",
+      "editable": false,
+      "sha256": "e9bd0d62d56c3dff8fac7d2d3428b3751d492fd79e33f50f4ae3882251459a23"
+    },
+    "profiles/architecture/rfc.md": {
+      "role": "entity",
+      "profile": "architecture",
+      "editable": false,
+      "sha256": "15c4e9a2962b2e131032b845b4d2cb810331ac642e011b1e8096187d37dabd37"
+    },
+    "profiles/operations/index.md": {
+      "role": "charter",
       "profile": "operations",
       "editable": false,
-      "sha256": "2644bf5b4d41af8b7325856f49ee546fb0a4254001d29b7fe03db2f0f6885f70"
+      "sha256": "735252f455b6b453092e61e98b78dc00e86f07e111abc64a925579b628bc2a1c"
     },
-    "profiles/operations/profile.md": {
-      "role": "guide",
+    "profiles/operations/postmortem.md": {
+      "role": "entity",
       "profile": "operations",
       "editable": false,
-      "sha256": "124e522036a26dc2f2f1ec1a4cc49c31c61986ebc9318e8dc7afa2f0c4ef3d78"
+      "sha256": "610c4339b7498cd292ffec85e82673aa903200fcfc4fd99a5628b2f696e9eaee"
     },
-    "profiles/validation/acceptance.pattern.md": {
-      "role": "pattern",
+    "profiles/validation/acceptance.md": {
+      "role": "entity",
       "profile": "validation",
       "editable": false,
-      "sha256": "16277e467d711137da379d65b33b80b7927ae0d99656728d467b7103f77ed757"
+      "sha256": "ee6e546e835335f8e896410bc8a4d9e981b94a51a5ce6135a796b7f22d893121"
     },
-    "profiles/validation/profile.md": {
-      "role": "guide",
+    "profiles/validation/index.md": {
+      "role": "charter",
       "profile": "validation",
       "editable": false,
-      "sha256": "50d490a474cdec39f3dd0b89fc937ca674d26b748f462d079c1cb948738ece37"
+      "sha256": "1698410d19e2e196bd9cdf226ef41eb2af9ab6bf8551266d756cc4fad4596684"
     },
-    "profiles/validation/testing.pattern.md": {
-      "role": "pattern",
+    "profiles/validation/testing.md": {
+      "role": "entity",
       "profile": "validation",
       "editable": false,
-      "sha256": "df58775109d32357781779fb9faf9c31271826ec75f2b0137ea995ca7179ca29"
+      "sha256": "1e6f2efcec81c9cfa4a2a9c36f05e666f32fddc4c5ed06ef3e97393275436cb6"
     }
-  },
-  "profiles": {
-    "core": {
-      "description": "Universal meta-governance protocol (routing, style, checklists, common patterns, intake SOP)",
-      "required": true
-    },
-    "validation": {
-      "description": "Product validation standard: acceptance and testing",
-      "required": false
-    },
-    "architecture": {
-      "description": "Architecture Decision Records (ADRs) and decision lifecycle",
-      "required": false
-    },
-    "operations": {
-      "description": "Operational knowledge layering (runbook triage, postmortems)",
-      "required": false
-    }
-  },
-  "roles": {
-    "guide": "Governance prose; must match standard byte for byte.",
-    "checklist": "Review and update procedures; must match standard byte for byte.",
-    "guard": "Maintainer and AI policy; must match standard byte for byte.",
-    "library": "Reusable document patterns; must match standard byte for byte.",
-    "pattern": "Domain pattern specification; must match standard byte for byte.",
-    "template": "Repository customization template; editable."
   }
 }

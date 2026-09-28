@@ -1,48 +1,40 @@
-# Documentation Governance
+# Documentation Governance Core (Protocol v6.0.0)
 
-Rules for organizing, writing, reviewing, and updating project
-documentation. This governance framework uses a **Micro-Core + Domain Profile
-Extensions** architecture (Protocol v3.0.0).
+Universal meta-governance protocol and verification standard for software engineering repositories.
 
-The core protocol is universal and project-neutral. Adopting repositories
-declare activated domain profiles in `contracts.md`.
+This specification implements the **Zero-Vendoring, Flat-Topology Architecture** (Protocol v6.0.0): combining deterministic machine-layer AST enforcement (`INV-LINT-*`) with cognitive agent protocols (`INV-AGENT-*`).
 
-## Use this guide
+---
 
-Before writing, modifying, or archiving documentation:
+## The Four Core Primitives
 
-1. If adopting this guide in a repository, work through [Adoption](adoption.md).
-2. Configure activated profiles and repository paths in [Repository Contracts](../contracts.md).
-3. Route all content through the four gates in [Routing](routing.md).
-4. Write content following [Writing Style](style-guide.md).
-5. For baseline document types, use the patterns in [Common Patterns](common-patterns.md).
-6. Check whether code changes require documentation updates with [Update Checklist](update-checklist.md).
-7. Review pull requests against [Review Checklist](review-checklist.md).
-8. For proposed changes to this governance standard itself, follow [Intake SOP](intake-sop.md).
+Documentation governance is organized into four orthogonal core primitives:
 
-## Core Directory Map
+| Core Document | Primitive | Description |
+| :--- | :--- | :--- |
+| [Taxonomy](taxonomy.md) | **Spatial Tensor** | 4-Dimensional coordinate system (Temperature, Lifecycle, Audience, Cognitive Mode) |
+| [Invariants](invariants.md) | **Rule Constitution** | Bifurcated invariants: Deterministic AST rules (`INV-LINT`) and Agent cognitive protocols (`INV-AGENT`) |
+| [Workflow](workflow.md) | **Operational Lifecycle** | Code-to-doc trigger matrix, PR review gates, standard intake SOP, and zero-vendoring adoption |
+| [Style Guide](style.md) | **Presentation Syntax** | Voice, capitalization, heading hierarchy, relative links, and formatting rules |
 
-| Page | Purpose |
-|------|---------|
-| [Adoption](adoption.md) | One-time decisions and checklist for installing this governance |
-| [Repository Contracts](../contracts.md) | Profile activation and path contracts for the adopting repository |
-| [Routing](routing.md) | The 4-gate priority routing cascade |
-| [Writing Style](style-guide.md) | Voice, headings, formatting, links, and cross-references |
-| [Common Patterns](common-patterns.md) | Structural patterns for baseline project documents (README, setup, etc.) |
-| [Update Checklist](update-checklist.md) | Code change-to-documentation update trigger matrix |
-| [Review Checklist](review-checklist.md) | PR review gate checklist for maintainers |
-| [Intake SOP](intake-sop.md) | Tier 0–3 admission gates and evolution policy for the standard |
+---
 
-## Available Domain Profiles
+## Domain Capability Profiles
 
-| Profile | Purpose | Directory |
-|---------|---------|-----------|
-| **Validation** | Dual-tier product validation model (`acceptance.md`, `testing.md`) | `../profiles/validation/` |
-| **Architecture** | Architecture Decision Records (ADRs) and decision lifecycles | `../profiles/architecture/` |
-| **Operations** | Operational knowledge layers (Triage runbooks, postmortems) | `../profiles/operations/` |
+Adopting repositories activate domain capabilities declared in `.docgov.yml`. Each profile contains vertical entities:
 
-## Maintainer rule
+| Domain Profile | Focus | Vertical Entities | Directory |
+| :--- | :--- | :--- | :--- |
+| **Architecture** | Architectural decision records, living blueprints, and pre-decision proposals | `adr.md`, `living-snapshot.md`, `rfc.md` | `profiles/architecture/` |
+| **Validation** | Real user journey acceptance and automated test verification | `acceptance.md`, `testing.md` | `profiles/validation/` |
+| **Operations** | Operational knowledge layering and incident analysis | `postmortem.md` | `profiles/operations/` |
 
-This directory is policy, not ordinary project documentation. AI assistants
-may read it and suggest improvements, but must not directly modify it. A
-human maintainer applies policy changes.
+---
+
+## Quick Navigation
+
+1. **Adopting this governance**: Work through [Workflow: Adoption](workflow.md#part-4-repository-adoption-workflow-protocol-v600).
+2. **Deciding where content lives**: Consult the 4D coordinate tensor in [Taxonomy](taxonomy.md).
+3. **Checking hard rules**: Verify against the codified [Invariants](invariants.md).
+4. **Reviewing a Pull Request**: Follow [Workflow: PR Review Gates](workflow.md#part-2-pull-request-review-gates).
+5. **Evaluating documentation impact of code changes**: Check [Workflow: Trigger Matrix](workflow.md#part-1-code-to-documentation-trigger-matrix).

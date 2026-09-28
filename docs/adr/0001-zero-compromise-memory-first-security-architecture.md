@@ -1,3 +1,10 @@
+---
+id: ADR-0001
+title: "Zero-Compromise Memory-First Security Architecture"
+status: accepted
+date: 2026-09-04
+---
+
 # ADR-0001: Zero-Compromise Memory-First Security Architecture
 
 - **Status**: Accepted

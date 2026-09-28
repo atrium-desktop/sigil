@@ -1,3 +1,10 @@
+---
+id: ADR-0003
+title: "Clean-Break Secret Derivation and Memory Zeroization Standard"
+status: accepted
+date: 2026-09-08
+---
+
 # ADR-0003: Clean-Break Secret Derivation and Memory Zeroization Standard
 
 - **Status**: Accepted

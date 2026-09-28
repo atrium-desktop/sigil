@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Build
+- Adopted Optics `v0.0.52` (unified monorepo identity to glyph, vista, and transit via ADR-0106; global lockstep versioning across all bindings).
+
 ## [1.3.9] - 2026-09-10
 
 ### Fixed

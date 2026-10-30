@@ -159,6 +159,8 @@ busctl --user status org.freedesktop.secrets
 
 ## Documentation
 
+- **[Getting Started Tutorial](docs/tutorials/getting-started.md)**: Hands-on guide to building and running Sigil.
+- **[Documentation Index](docs/index.md)**: Full Diátaxis documentation suite.
 - **[ADR-0001: Zero-Compromise Memory-First Security Architecture](docs/adr/0001-zero-compromise-memory-first-security-architecture.md)**
 - **[ADR-0002: Industrial-Grade Zero-Friction Desktop Lifecycle](docs/adr/0002-industrial-grade-zero-friction-desktop-lifecycle-and-envelope-vault.md)**
 - **[Architecture Guide](docs/explanation/architecture.md)**

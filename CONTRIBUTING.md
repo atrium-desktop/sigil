@@ -13,8 +13,8 @@ For security vulnerabilities, do **not** open a public issue. Contact the mainta
 
 See [docs/dev/setup.md](docs/dev/setup.md) for environment setup and dependencies,
 [docs/dev/development.md](docs/dev/development.md) for build instructions and debugging tools,
-and [docs/dev/optics-dev-worktree.md](docs/dev/optics-dev-worktree.md) for
-the linked Git worktree development workflow.
+[docs/dev/optics-dev-worktree.md](docs/dev/optics-dev-worktree.md) for the linked Git worktree development workflow,
+and [docs/dev/standards/README.md](docs/dev/standards/README.md) for engineering standards.
 
 ## Submitting a Pull Request
 
@@ -22,12 +22,12 @@ the linked Git worktree development workflow.
    ```bash
    git checkout -b feat/my-feature
    ```
-2. Make your changes following [docs/dev/conventions.md](docs/dev/conventions.md).
-3. Run the full check suite before pushing:
+2. Make your changes following [docs/dev/conventions.md](docs/dev/conventions.md) and [docs/dev/standards/workflow.md](docs/dev/standards/workflow.md).
+3. Run the full verification suite before pushing:
    ```bash
-   cargo fmt --check
-   cargo clippy -- -D warnings
-   cargo test
+   cargo fmt --all -- --check
+   cargo clippy --workspace --all-targets -- -D warnings
+   cargo test --workspace
    ```
 4. Push and open a PR against `main`.
 

@@ -15,7 +15,7 @@ date: 2026-09-08
 
 Previous records ([ADR-0001](0001-zero-compromise-memory-first-security-architecture.md), [ADR-0002](0002-industrial-grade-zero-friction-desktop-lifecycle-and-envelope-vault.md), and [ADR-0003](0003-clean-break-secret-derivation-and-memory-zeroization.md)) established a memory-first security model, envelope multi-slot persistence, and standardized HKDF-SHA256 derivation for `atrium.portal.Secret/v1`.
 
-However, an exhaustive architectural review across the entire system boundary—including the live interaction between `sigil` and `xdg-desktop-portal-atrium` (ADR-0020 / ADR-0022)—revealed foundational dilemmas and historical baggage that require a final, uncompromising clean break:
+However, an exhaustive architectural review across the entire system boundary—including the live interaction between `sigil` and `xdg-desktop-portal-atrium`—revealed foundational dilemmas and historical baggage that require a final, uncompromising clean break:
 
 1. **The False Dichotomy: "Sandbox Portal vs. Central Keyring"**:
    - Modern sandboxed desktops (Flatpak / Wayland) operate under a zero-trust model where each application is a sovereign island. For the portal secret interface (`org.freedesktop.portal.Secret`), applications only need a stable, mathematically isolated 32-byte master secret to encrypt their own local databases (e.g., Firefox's `key4.db`, Chrome's `Login Data`). In this mode, a centralized credential database is redundant and harmful ($O(N)$ storage growth, file lock contention, orphan records upon uninstall).
@@ -149,7 +149,7 @@ pub struct SigilWireHeader {
 - **Invulnerable Password Rotation**: Modifying user passwords is an isolated $O(1)$ slot update that never touches or endangers stored application secrets.
 - **Zero Heap Footprint**: `sigil-wire-v2` eliminates dynamic heap allocations and residual plaintext fragments across the native IPC boundary.
 - **Zero Plaintext In-Memory Exposure**: Secrets are decrypted strictly on demand and scrubbed instantly; no bulk plaintexts reside in memory while unlocked.
-- **Full Alignment with Ecosystem**: Implements the exact stateless contract required by `xdg-desktop-portal-atrium` (ADR-0020 / ADR-0022) while delivering a production-grade secret broker.
+- **Full Alignment with Ecosystem**: Implements the exact stateless contract required by `xdg-desktop-portal-atrium` while delivering a production-grade secret broker.
 
 ### Negative / Trade-offs
 - **Binary Wire Upgrade**:

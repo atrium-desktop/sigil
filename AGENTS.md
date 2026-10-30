@@ -1,35 +1,36 @@
-Before writing, modifying, or archiving any documentation in this repository, please read and follow the documentation governance files in `docs/governance/documentation/` (starting with `docs/governance/documentation/index.md` and `docs/governance/documentation/style-guide.md`).
+# Agent Directives
 
-<!-- BEGIN DOCGOV DIRECTIVES -->
-## Documentation Governance Directives
+## 1. Operational Guardrails (Hard Constraints)
+- **Prohibited Git Commands**: NEVER execute `git stash`, `git branch`, or `git reset`.
+- **Command Termination**: All commands MUST be finite and self-terminating. Never start background daemons or unbounded loops without a strict timeout.
 
-You are bound by repository invariants. Violations will fail CI (`docgov check`).
+## 2. Core Mental Model & Subsystem Boundaries
+- **Concentric Architecture**: Sigil organizes its workspace into four concentric layers (`sigil-ipc` -> `sigil-core` -> `sigil-client` / `sigil-secret-service` -> `sigil` / `sigil-prompter` / `sigil-pam`). Dependencies flow strictly inward.
+- **Dual-Sovereign Architecture**: Decouples sandboxed portal secret derivation (`org.freedesktop.portal.Secret`) from native host collaboration (`org.freedesktop.secrets`). Portal callers receive clean-break mathematical HKDF derivations and must never access the master volume key or keyring collection items.
+- **Memory-First Hardening**: Process dumpability is explicitly disabled (`PR_SET_DUMPABLE = 0`, `RLIMIT_CORE = 0`). Any struct holding secret keys or plaintext buffers MUST implement `zeroize::Zeroize` and trigger zeroization on drop (`#[zeroize(drop)]`).
+- **Native IPC vs. D-Bus Isolation**: High-privilege lifecycle operations (unlock, slot rotation, portal master secret derivation) are routed exclusively through `/run/user/<uid>/sigil/native.sock`. The socket enforces kernel-level `SO_PEERCRED` checks on every connection.
+- **Envelope Multi-Slot Storage**: The vault payload is encrypted by an independent 256-bit `VolumeKey` wrapped in envelope slots. Password rotation is strictly an $O(1)$ envelope slot update and must never re-encrypt stored items.
+- **Session-Bound Eviction**: Keys are wiped in memory immediately upon receiving systemd-logind lock or deactivation signals (`Session.Lock`, `Active=false`).
 
-### 1. Machine Invariants (Pre-Submit Checklist)
-- `[INV-LINT-01] Location Sanitization`: Never create arbitrary Markdown files at the repository root.
-- `[INV-LINT-02] Contributor Firewall`: Public docs (`docs/{tutorials,how-to,reference,explanation}/`) must NEVER link into internal docs (`docs/dev/`).
-- `[INV-LINT-03] Frontmatter Schema`: ADRs must contain valid Frontmatter with standardized status enum.
-- `[INV-LINT-04] Code-Doc Sync`: Modifying monitored paths in `src/` requires updating `docs/` in the same change.
-- `[INV-LINT-05] Agent Directives Binding`: Ensure this docgov directives block is retained in agent configuration.
+## 3. Engineering Discipline
+- **Mechanisms Over Exhortations**: Rely on Rust compiler typestates, private visibility, RAII guards, `Zeroize` implementations, and automated tests to guarantee invariants. Never rely on natural-language comments alone.
+- **Anti-Inflation**: Do not mint pseudo-invariant tags. Adhere to the canonical registry (`[INV-SEC-*]`, `[INV-ARCH-*]`). State transitions belong in named Rust enums.
+- **Atomic Verification**: Always verify code changes with `cargo check --workspace` and relevant crate test suites (`cargo test --workspace`) before declaring tasks complete.
+- **Clean Epistemic Lineage**: References must resolve to canonical in-repo ADRs (`docs/adr/0001`+). Never reference non-existent external legacy numbers.
 
-### 2. Cognitive & Architecture Protocols (Thinking Framework)
-- `[INV-AGENT-01] Negative Knowledge`: Every new ADR MUST contain a 'Rejected Alternatives' section explaining why discarded options were not chosen.
-- `[INV-AGENT-02] Context Routing & Chesterton's Fence`:
-  - In feature generation: NEVER use docs marked `status: superseded` or `status: rejected` as active designs (prevents resurrecting dead patterns).
-  - In refactoring/investigation: MUST retrieve `superseded` docs as negative constraints (learn from historical failure modes).
-- `[INV-AGENT-03] Blameless Postmortem`: Postmortems MUST analyze system defense failures and detection gaps. Attribution of personal human blame is strictly prohibited.
-
-### 3. Canonical Governance Knowledge & Context
-Before drafting or restructuring documentation, inspect the local governance specifications:
-- 4D Coordinate Tensor: `docs/governance/documentation/core/taxonomy.md`
-- System Invariants Constitution: `docs/governance/documentation/core/invariants.md`
-- Technical Voice & Link Contracts: `docs/governance/documentation/core/style.md`
-- ADR & Architecture RFC Standard: `docs/governance/documentation/profiles/architecture/adr.md`
-- Quality & Verification Guides: `docs/governance/documentation/profiles/validation/testing.md`
-
-### 4. Fast Verification
-Before completing any task, run:
-```bash
-docgov check
-```
-<!-- END DOCGOV DIRECTIVES -->
+## 4. On-Demand Standards Routing
+Do not guess repository rules or rely on stale assumptions. Consult authoritative specifications as needed:
+- Subsystem Topology & Living Blueprint: `docs/dev/subsystems.md`
+- Documentation Standards Suite: `docs/dev/standards/README.md`
+  - System Architecture Governance: `docs/dev/standards/architecture.md`
+  - Invariant & Constraint Policy: `docs/dev/standards/invariants.md`
+  - ADR Authoring & Lifecycle: `docs/dev/standards/adr.md`
+  - RFC Standards: `docs/dev/standards/rfc.md`
+  - Documentation Taxonomy & Layout: `docs/dev/standards/taxonomy.md`
+  - Markdown & Hyperlink Style: `docs/dev/standards/style.md`
+  - Engineering Workflow & Gates: `docs/dev/standards/workflow.md`
+  - Blameless Incident Postmortems: `docs/dev/standards/postmortems.md`
+- Testing Strategy & Execution: `docs/dev/testing.md`
+- Acceptance Validation Runbook: `docs/dev/acceptance.md`
+- Coding & Sensitive Data Conventions: `docs/dev/conventions.md`
+- Companion Optics Worktree: `docs/dev/optics-dev-worktree.md`

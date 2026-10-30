@@ -130,5 +130,5 @@ now owns the name.
 | GNOME Keyring | `/usr/lib/systemd/user/gnome-keyring-daemon.service` + XDG autostart + PAM | Multiple paths; see above |
 | KWallet | `/usr/share/dbus-1/services/org.kde.kwalletd5.service` | dbus-daemon activation |
 
-See [../explanation/architecture.md](../explanation/architecture.md#service-activation) for
+See [../explanation/architecture.md](../explanation/architecture.md#design-philosophy-zero-friction-zero-compromise) for
 why `sigil` uses systemd `BusName=` activation rather than a standalone `.service` file.

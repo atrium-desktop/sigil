@@ -1,6 +1,6 @@
 use clap::Parser;
 use iris::{Application, Config};
-use lens::{Frame, Input, TextBuf};
+use lens::{Frame, Input, Style, TextBuf};
 use sigil_ipc::{write_request_sync, IpcRequest};
 
 /// Interactive graphical credential prompter for Sigil vault.
@@ -80,7 +80,11 @@ impl PrompterState {
             .items_center()
             .show(|frame| {
                 frame.label_sized("Enter Vault Password", 18.0);
+
+                let muted = frame.theme().fg().with_alpha(160);
+                frame.push_style(Style::new().with_fg(muted));
                 frame.label("Please provide the master password to continue.");
+                frame.pop_style();
 
                 frame.spacer(4.0);
 
@@ -91,7 +95,10 @@ impl PrompterState {
                 }
 
                 if let Some(err) = self.error_message {
+                    let err_color = frame.theme().error();
+                    frame.push_style(Style::new().with_fg(err_color));
                     frame.label_sized(err, 12.0);
+                    frame.pop_style();
                 } else {
                     frame.spacer(14.0);
                 }
@@ -99,7 +106,7 @@ impl PrompterState {
                 frame.spacer(4.0);
 
                 frame.row().gap(16.0).items_center().show(|frame| {
-                    if frame.button("Cancel") {
+                    if frame.button_subtle("Cancel") {
                         trigger_cancel = true;
                     }
                     if frame.button_primary("Unlock") {

@@ -33,7 +33,7 @@ secret derivation and IPC response pathways:
    in heap memory after socket dispatch until overwritten.
 3. **Cross-Project Divergence**:
    Integration tests in `sigil-client` still used the deprecated `aegis.portal.Secret/v1`
-   namespace, while the production portal (`xdg-desktop-portal-atrium`, ADR-0020 / ADR-0022)
+   namespace, while the production portal (`xdg-desktop-portal-atrium`)
    issues requests against `atrium.portal.Secret/v1`.
 
 ## Decision
@@ -79,7 +79,7 @@ We execute a complete clean-break update across the derivation pipeline and wire
   during IPC serialization.
 - **Unified Cryptographic Surface**: A single, strictly domain-separated HKDF derivation
   function across the entire codebase.
-- **End-to-End Alignment**: 100% interoperability with `xdg-desktop-portal-atrium` (ADR-0022).
+- **End-to-End Alignment**: 100% interoperability with `xdg-desktop-portal-atrium`.
 
 ### Negative / Trade-offs
 - Legacy external clients requesting `aegis.portal.Secret/v1` will derive via the standard

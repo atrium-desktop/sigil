@@ -10,7 +10,7 @@ negative_knowledge: true
 
 # NNNN. [Title of Decision]
 
-- Status: Draft | Accepted | Rejected | Deprecated | Superseded by [ADR-NNNN](NNNN-slug.md)
+- Status: Draft | Accepted | Rejected | Deprecated | Superseded by ADR-NNNN
 - Date: YYYY-MM-DD
 - Deciders: [Names / GitHub handles]
 - Consulted: [Names / GitHub handles]

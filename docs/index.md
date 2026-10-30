@@ -1,6 +1,6 @@
-# sigil Documentation
+# Sigil Documentation
 
-Welcome to the `sigil` documentation. `sigil` is a secure, memory-first desktop credential infrastructure daemon implemented in Rust. It provides a standard freedesktop.org Secret Service API implementation, a native IPC interface, and an XDG Desktop Portal Secret backend.
+Welcome to the `sigil` documentation. `sigil` is a secure, memory-first desktop credential infrastructure daemon implemented in Rust. It provides a standard freedesktop.org Secret Service API implementation, a hardened native IPC interface, and an XDG Desktop Portal Secret backend.
 
 ---
 
@@ -8,26 +8,24 @@ Welcome to the `sigil` documentation. `sigil` is a secure, memory-first desktop 
 
 ```text
 docs/
-├── adr/               # Architecture Decision Records (immutable)
-├── explanation/       # Architecture, threat model, cryptographic concepts
-├── how-to/            # Task-oriented step-by-step guides & topics
+├── tutorials/         # Guided hands-on lessons (learning-oriented)
+├── how-to/            # Task-oriented step-by-step guides & topic recipes
 ├── reference/         # Native IPC protocol, storage formats, CLI specifications
-├── dev/               # Contributor firewall: setup, testing, acceptance
-└── governance/        # Documentation governance (protocol v3.1.0)
+├── explanation/       # Architecture, threat model, cryptographic concepts
+├── adr/               # Architecture Decision Records (canonical decision registry)
+└── dev/               # Engineering surface: standards, blueprints, testing runbooks
 ```
 
 ---
 
-### Explanations (Understanding)
+### Tutorials (Learning)
 
-- **[Architecture Overview](explanation/architecture.md)**: System decomposition, crate boundaries, and design principles.
-- **[Threat Model](explanation/threat-model.md)**: Trust boundaries, security claims, and non-claims.
-- **[Freedesktop Specifications](explanation/freedesktop-spec.md)**: Secret Service API and Portal Secret integration.
-- **[Unlock Strategies](explanation/unlock-strategies.md)**: Envelope key slots, transparent PAM pass-through, and session zeroization.
+- **[Getting Started](tutorials/getting-started.md)**: Guided walkthrough from clean clone to building, launching the daemon, initializing a vault, and storing/retrieving credentials.
+- **[Tutorials Index](tutorials/index.md)**: Learning paths and prerequisites.
 
 ---
 
-### How-To Guides & Topics (Tasks)
+### How-To Guides (Tasks)
 
 #### Packaging & Desktop Operations
 - **[Packaging Guide](how-to/packaging-guide.md)**: Distro packaging recipes for Arch Linux (`PKGBUILD`), Fedora (`.spec`), Debian/Ubuntu (`debian/`), and NixOS.
@@ -50,15 +48,16 @@ docs/
 
 ---
 
-### Developer & Contributor Firewall
+### Explanations (Understanding)
 
-- **[Developer Guide](dev/index.md)**: Local build environment, workflow, and architecture constraints.
-- **[Testing Guide](dev/testing.md)**: Automated test execution, unit/integration tiers, and diagnostic triage matrix.
-- **[Acceptance Testing](dev/acceptance.md)**: Human and stakeholder end-to-end verification and acceptance scenarios.
+- **[Architecture Overview](explanation/architecture.md)**: System decomposition, crate boundaries, and design principles.
+- **[Threat Model](explanation/threat-model.md)**: Trust boundaries, security claims, and non-claims.
+- **[Freedesktop Specifications](explanation/freedesktop-spec.md)**: Secret Service API and Portal Secret integration.
+- **[Unlock Strategies](explanation/unlock-strategies.md)**: Envelope key slots, transparent PAM pass-through, and session zeroization.
 
 ---
 
-### Governance & Architecture
+### Architecture Decisions & Engineering Standards
 
-- **[Architecture Decision Records](adr/index.md)**: Architectural decisions ([ADR-0001: Zero-Compromise Security Architecture](adr/0001-zero-compromise-memory-first-security-architecture.md), [ADR-0002: Industrial-Grade Zero-Friction Desktop Lifecycle](adr/0002-industrial-grade-zero-friction-desktop-lifecycle-and-envelope-vault.md)).
-- **[Governance Standards](governance/index.md)**: Modular documentation governance framework (protocol v3.1.0).
+- **[Architecture Decision Records](adr/index.md)**: Canonical architectural decision registry ([ADR-0001](adr/0001-zero-compromise-memory-first-security-architecture.md) through [ADR-0005](adr/0005-docgov-decoupling-flat-standards-suite-and-documentation-topology-modernization.md)).
+- **[Developer Portal](dev/index.md)**: Contributor workflows, testing runbooks, living subsystem blueprints, and authoritative standards suite in `docs/dev/standards/`.

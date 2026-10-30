@@ -2,10 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Documentation
+- Modernized documentation topology and information architecture following `nuo` pattern (ADR-0005):
+  - Decoupled from external `docgov` tooling and deleted `.docgov.yml`, `.docgov.lock`.
+  - Abolished nested `docs/governance/` junk drawer in favor of a flat, high-cohesion standards suite in `docs/dev/standards/`.
+  - Completed four-quadrant Diátaxis structure with `docs/tutorials/getting-started.md`.
+  - Created authoritative living architecture blueprint in `docs/dev/subsystems.md`.
+  - Streamlined `AGENTS.md` with operational guardrails, memory-first mental model, and standards routing.
+
+### Build
+- Adopted Optics `v0.0.62` (presentation pacing, hardware subsurfaces, dual-thread presentation pipeline; GPU analytic vector coverage and curve rendering; convex fast-path tessellation and incremental candidate sets; device-resolution icon coverage masks; pre-lens event seam).
+
+### UI
+- Refined `sigil-prompter` with Lens subtle button semantics, theme-aware error styling, and muted text hierarchy.
+
 ## [1.3.10] - 2026-09-28
 
 ### Build
-- Adopted Optics `v0.0.52` (unified monorepo identity to glyph, vista, and transit via ADR-0106; global lockstep versioning across all bindings).
+- Adopted Optics `v0.0.52` (unified monorepo identity to glyph, vista, and transit; global lockstep versioning across all bindings).
 
 ### Documentation
 - Aligned documentation governance standard to Protocol v0.0.5 directives (`.docgov.yml`, `.docgov.lock`, `AGENTS.md`, and ADR frontmatter metadata).

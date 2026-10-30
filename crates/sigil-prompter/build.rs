@@ -5,8 +5,11 @@
 fn main() {
     let rpaths = std::env::var("DEP_IRIS_RS_RPATHS").unwrap_or_default();
     let dirs: Vec<&str> = rpaths.split(';').filter(|s| !s.is_empty()).collect();
-    if !dirs.is_empty() {
-        println!("cargo:rustc-link-arg=-Wl,--disable-new-dtags");
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if !dirs.is_empty() && target_os != "windows" {
+        if target_os != "macos" {
+            println!("cargo:rustc-link-arg=-Wl,--disable-new-dtags");
+        }
         for dir in &dirs {
             println!("cargo:rustc-link-arg=-Wl,-rpath,{dir}");
         }

@@ -50,6 +50,80 @@ Unlike legacy daemons, `sigil` parses and validates all command-line arguments *
 - Executing `sigil --version` or `sigil --help` will **never** register a D-Bus name or conflict with an active instance.
 - Providing an unknown argument (e.g., `sigil --invalid`) will fail immediately with exit code `2` and display the help hint, preventing accidental daemon execution.
 
+### Subcommands
+
+The `sigil` CLI provides client commands to interact with the running user daemon over its native IPC socket (`/run/user/<uid>/sigil/native.sock`) as well as offline storage utilities:
+
+#### `sigil status`
+Queries the running daemon's liveness, lock status, active socket path, and storage directory:
+```bash
+sigil status
+```
+
+#### `sigil unlock`
+Unlocks the running daemon from a terminal session. Prompts interactively with terminal echo suppressed:
+```bash
+# Interactive prompt (recommended)
+sigil unlock
+
+# Headless / scripted unlock
+sigil unlock --password "$MY_VAULT_PASSWORD"
+sigil unlock --password-file /path/to/password.txt
+
+# Unlock using an emergency recovery key
+sigil unlock --recovery-key SIGIL-RKEY-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX
+```
+
+#### `sigil lock`
+Requests the running daemon to lock immediately and zeroize all master keys and decrypted caches in RAM:
+```bash
+sigil lock
+```
+
+#### `sigil recover`
+Recovers and re-synchronizes the vault with a new session password after an out-of-band administrative password change:
+```bash
+# Interactive prompt (prompts for recovery secret and new password)
+sigil recover
+
+# Non-interactive / scripted recovery
+sigil recover --recovery-secret "$PREVIOUS_PWD_OR_RECOVERY_KEY" --new-password "$NEW_SYSTEM_PWD"
+```
+
+#### `sigil recovery-key`
+Generates and verifies Slot 1 emergency recovery keys:
+```bash
+# Generate a new 160-bit Crockford Base32 emergency recovery key and enroll into Slot 1
+sigil recovery-key generate
+
+# Verify a recovery key against Slot 1
+sigil recovery-key verify
+sigil recovery-key verify SIGIL-RKEY-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX
+```
+
+#### `sigil doctor`
+Executes an automated, 7-point diagnostic suite checking D-Bus name ownership, conflicting keyrings (`gnome-keyring`, `kwallet`), systemd socket state, storage permissions, graphical display variables, and PAM module placement:
+```bash
+sigil doctor
+```
+
+#### `sigil import-credentials`
+Imports credential items from an external JSON or CSV file into a collection:
+```bash
+sigil import-credentials --input credentials.json --collection login
+sigil import-credentials --input passwords.csv --format csv
+```
+
+#### `sigil export-vault` & `sigil import-vault`
+Creates or restores authenticated, encrypted offline disaster recovery archives (Argon2id + XChaCha20-Poly1305):
+```bash
+# Export encrypted backup archive
+sigil export-vault --output ~/vault-backup.enc --archive-password "$BACKUP_PWD"
+
+# Import encrypted backup archive
+sigil import-vault --input ~/vault-backup.enc --archive-password "$BACKUP_PWD"
+```
+
 ---
 
 ## 2. `sigil-prompter` CLI Reference

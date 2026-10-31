@@ -24,14 +24,14 @@ Historically, desktop credential management forced a trade-off between user fric
                  ┌───────────────────────────┐                         xdg-desktop-portal
                  │           sigil           │                                  │
                  │                           │                                  ▼
-                 │  Secret Service adapter   │                         xdg-desktop-portal-atrium
+                 │    sigil-dbus-secrets     │                         xdg-desktop-portal-atrium
                  │             │             │                                  │
                  │             ▼             │                                  ▼ (sigil-client)
-                 │        sigil-core         │                       Unix Socket (SO_PEERCRED)
-                 │  (crypto / store / state) │                       /run/user/<uid>/sigil/native.sock
+                 │        sigil-vault        │                       Unix Socket (SO_PEERCRED)
+                 │  (store / state machine)  │                       /run/user/<uid>/sigil/native.sock
                  │             │             │                                  │
                  │             ▼             │◄─────────────────────────────────┤
-                 │  native IPC server/socket │◄─── pam_sigil.so (login/lock/chauthtok)
+                 │     sigil-ipc-server      │◄─── pam_sigil.so (login/lock/chauthtok)
                  └─────────────┬─────────────┘
                                │
                                ▼
@@ -49,13 +49,16 @@ sigil/
 ├── Cargo.lock
 │
 ├── crates/
-│   ├── sigil-core/           # Unified engine: domain models, crypto primitives, envelope store, state machine & IPC server
-│   ├── sigil-ipc/            # Lightweight, decoupled wire protocol, framing codecs & peer credential checks
-│   ├── sigil-client/         # Async Rust SDK for desktop components (portal backend, prompter)
-│   ├── sigil-secret-service/ # D-Bus org.freedesktop.secrets protocol adapter
-│   ├── sigil/                # Daemon assembly, process hardening, logind listener
-│   ├── sigil-prompter/       # Native prompt agent for emergency recovery and unlock dialogs
-│   └── sigil-pam/            # Hardened, zero-disk, zero-crypto-dependency PAM module (auth, setcred, session, chauthtok)
+│   ├── sigil-types/          # Layer 0: Ubiquitous domain types, safe memory wrappers (SecretBytes, LockState)
+│   ├── sigil-crypto/         # Layer 1: Authenticated modern vault crypto (XChaCha20Poly1305, Argon2id, HKDF, LockedKeyBox)
+│   ├── sigil-vault/          # Layer 2: Envelope multi-slot store (FileVaultStore) & lifecycle engine (SigilService)
+│   ├── sigil-ipc/            # Layer 2: Wire protocol framing, codecs, SO_PEERCRED & socket path locator
+│   ├── sigil-ipc-server/     # Layer 3: Native IPC Unix domain socket listener & systemd socket activation
+│   ├── sigil-dbus-secrets/   # Layer 3: D-Bus org.freedesktop.secrets protocol adapter (encapsulates DH/AES-CBC session crypto)
+│   ├── sigil-client/         # Layer 3: Rust client SDK with dual async/sync APIs
+│   ├── sigil/                # Layer 4: Host daemon assembly, process hardening, logind listener
+│   ├── sigil-prompter/       # Layer 4: Optics GUI unlock dialog (pure sync, zero Tokio dependency)
+│   └── sigil-pam/            # Layer 4: Hardened PAM authentication module pam_sigil.so (pure sync, zero crypto, zero Tokio)
 │
 ├── docs/
 └── systemd/
@@ -67,23 +70,44 @@ sigil/
 
 ## Core Components and Responsibilities
 
-### `sigil-core`
-Consolidates the core domain, cryptographic engine, envelope persistence, and service orchestration:
-- **`domain`**: Strongly typed domain identifiers (`CredentialId`, `Namespace`, `Subject`, `Purpose`, `SecretBytes`, `LockState`, `SigilError`).
-- **`crypto`**: XChaCha20-Poly1305 AEAD, Argon2id KDF, HKDF domain separation, and ephemeral Diffie-Hellman session derivation.
-- **`store`**: Envelope Multi-Slot Storage (v2 format): `vault.meta`, `vault.slots/`, `vault.data`, atomic file replacement.
-- **`service`**: State machine, lock/unlock lifecycle, zero-touch provisioning, and password rotation.
-- **`server`**: `NativeIpcServer` hosting the Unix domain socket.
+### `sigil-types` (Layer 0)
+The bedrock domain types:
+- `SecretBytes`: Memory-safe zeroize-on-drop byte container.
+- `LockState`: Service lock state machine variants.
+- Strongly typed domain identifiers: `Namespace`, `Subject`, `Purpose`, `CredentialId`, `CredentialMetadata`.
 
-### `sigil-pam`
-- **Authentication & Session (`pam_sm_authenticate` / `pam_sm_setcred` / `pam_sm_open_session`)**:
-  Bypasses system accounts (`uid < 1000`). Forwards authentication tokens over `/run/user/<uid>/sigil/native.sock` in memory. If the vault is uninitialized, triggers instant first-login auto-provisioning.
-- **Password Stack (`pam_sm_chauthtok`)**:
-  Captures both old and new authentication tokens during password changes and issues `RotateSlotPassword`. If old credentials are unavailable (admin reset), tags the vault for self-healing recovery without corrupting state.
+### `sigil-crypto` (Layer 1)
+Modern, constant-time vault cryptography:
+- `XChaCha20-Poly1305`: Authenticated symmetric encryption for envelope slots and records.
+- `Argon2id`: Memory-hard password-based key derivation.
+- `HKDF-SHA256`: Cryptographic subkey derivation for portal apps and item keys.
+- `LockedKeyBox`: Memory-locked, non-dumpable memory page container (`mlock`, `MADV_DONTDUMP`).
 
-### `sigil` (Daemon Assembly)
-- Enforces runtime isolation: sets `PR_SET_DUMPABLE = 0` and `RLIMIT_CORE = 0`.
-- Subscribes to `org.freedesktop.login1` system bus signals:
-  - `Session.Lock`: Destroys the in-memory `VolumeKey` and wipes decrypted items via `zeroize::Zeroize`.
-  - `Active=false`: Evicts keys immediately upon fast user switching or seat deactivation.
-- Re-registers transparently upon subsequent PAM unlock events.
+### `sigil-vault` (Layer 2)
+The vault storage and state machine engine:
+- `FileVaultStore`: Multi-slot envelope persistence (`vault.meta`, `vault.slots/`, `vault.data`) with atomic replacement (`atomic_replace`).
+- `SigilService`: Lifecycle state machine (`Uninitialized`, `Locked`, `Unlocked`, `Desynced`), auto-provisioning, password rotation, and item CRUD.
+
+### `sigil-ipc-server` (Layer 3)
+Inbound Native IPC server:
+- Listens on `/run/user/<uid>/sigil/native.sock` or adopts systemd socket activation (`LISTEN_FDS`).
+- Verifies caller UID via kernel `SO_PEERCRED` checks.
+
+### `sigil-dbus-secrets` (Layer 3)
+Inbound Secret Service D-Bus adapter:
+- Implements `org.freedesktop.secrets` specification (`Collection`, `Item`, `Session`, `Prompt`).
+- Encapsulates legacy RFC 2631 Diffie-Hellman and AES-128-CBC session negotiation.
+
+### `sigil-client` (Layer 3)
+Native IPC client library providing both async (`SigilClient`) and synchronous (`SigilSyncClient`) APIs.
+
+### `sigil-pam` (Layer 4)
+Pluggable Authentication Module (`pam_sigil.so`):
+- Bypasses system accounts (`uid < 1000`). Forwards authentication tokens over `/run/user/<uid>/sigil/native.sock` in memory.
+- Pure synchronous execution with zero cryptographic dependencies and zero Tokio runtime.
+
+### `sigil` (Layer 4)
+Host daemon assembly:
+- Enforces process hardening: `PR_SET_DUMPABLE = 0`, `RLIMIT_CORE = 0`, and opportunistic `mlockall`.
+- Subscribes to `org.freedesktop.login1` signals (`Session.Lock`, `Active=false`) to instantly wipe master keys in memory.
+- Binds `sigil-ipc-server` and `sigil-dbus-secrets` to `SigilService`.

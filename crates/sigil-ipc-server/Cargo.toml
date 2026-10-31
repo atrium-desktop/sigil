@@ -1,0 +1,21 @@
+[package]
+name = "sigil-ipc-server"
+version.workspace = true
+edition = "2021"
+authors = ["Sigil Project"]
+description = "Native IPC Unix domain socket server and systemd activation adapter for sigil"
+license.workspace = true
+
+[dependencies]
+sigil-types = { path = "../sigil-types" }
+sigil-vault = { path = "../sigil-vault" }
+sigil-ipc = { path = "../sigil-ipc", features = ["async"] }
+tokio = { workspace = true, features = ["net", "io-util", "sync", "time", "rt"] }
+tracing = { workspace = true }
+zeroize = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+libc = { workspace = true }
+
+[dev-dependencies]
+sigil-client = { path = "../sigil-client" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -1,15 +1,22 @@
+#[cfg(feature = "async")]
 pub mod client;
 pub mod error;
+pub mod sync;
 
-pub use client::{SigilClient, DEFAULT_SOCKET_SUBPATH};
+#[cfg(feature = "async")]
+pub use client::SigilClient;
 pub use error::{ClientError, Result};
+pub use sigil_ipc::DEFAULT_SOCKET_SUBPATH;
+pub use sync::SigilSyncClient;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sigil_core::{FileVaultStore, MasterKey, NativeIpcServer, SigilService};
+    use sigil_ipc_server::NativeIpcServer;
+    use sigil_vault::{FileVaultStore, MasterKey, SigilService};
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[cfg(feature = "async")]
     async fn test_client_integration() {
         let temp_dir =
             std::env::temp_dir().join(format!("sigil_client_test_{}", std::process::id()));
@@ -32,7 +39,7 @@ mod tests {
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         }
 
-        let client = SigilClient::new(sock_path);
+        let client = SigilClient::new(sock_path.clone());
 
         // Ping works
         client.ping().await.unwrap();
@@ -79,6 +86,46 @@ mod tests {
             .await
             .unwrap();
         assert!(!client.is_locked().await.unwrap());
+
+        // Test sync client on the same server
+        let sync_client = SigilSyncClient::new(sock_path.clone());
+        sync_client.ping().unwrap();
+        assert!(!sync_client.is_locked().unwrap());
+
+        // Derive secret synchronously
+        let sync_sec = sync_client
+            .get_application_secret("atrium.portal.Secret/v1", "org.test.App", "master-secret")
+            .unwrap();
+        assert_eq!(sync_sec.len(), 32);
+
+        // Lock synchronously
+        sync_client.lock().unwrap();
+        assert!(sync_client.is_locked().unwrap());
+
+        // Unlock synchronously
+        sync_client
+            .unlock_with_password("rotated-passphrase")
+            .unwrap();
+        assert!(!sync_client.is_locked().unwrap());
+
+        // Rotate synchronously
+        sync_client
+            .rotate_password("rotated-passphrase", "sync-rotated-pass")
+            .unwrap();
+        sync_client.lock().unwrap();
+        assert!(sync_client
+            .unlock_with_password("rotated-passphrase")
+            .is_err());
+        sync_client
+            .unlock_with_password("sync-rotated-pass")
+            .unwrap();
+        assert!(!sync_client.is_locked().unwrap());
+
+        // Recover and sync synchronously
+        sync_client
+            .recover_and_sync("sync-rotated-pass", "final-sync-pass")
+            .unwrap();
+        assert!(!sync_client.is_locked().unwrap());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

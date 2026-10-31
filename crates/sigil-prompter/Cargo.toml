@@ -1,18 +1,15 @@
 [package]
 name = "sigil-prompter"
-version = "1.3.11"
+version.workspace = true
 edition = "2021"
 license.workspace = true
 
 [dependencies]
-sigil-ipc = { path = "../sigil-ipc" }
-tokio = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+sigil-types = { path = "../sigil-types" }
+sigil-client = { path = "../sigil-client", default-features = false, features = ["sync"] }
 iris = { workspace = true }
 lens = { workspace = true }
 lens-sys = { workspace = true }
 flux = { workspace = true }
 flux-sys = { workspace = true }
-serde_json = "1.0"
 clap = { workspace = true }

@@ -1,9 +1,12 @@
 use crate::error::{ClientError, Result};
-use sigil_ipc::{read_response, write_request, IpcRequest, IpcResponse, LockState, SecretBytes};
+use sigil_ipc::{
+    default_socket_path, read_response, write_request, IpcRequest, IpcResponse, LockState,
+    SecretBytes,
+};
 use std::path::{Path, PathBuf};
 use tokio::net::UnixStream;
 
-pub const DEFAULT_SOCKET_SUBPATH: &str = "sigil/native.sock";
+pub use sigil_ipc::DEFAULT_SOCKET_SUBPATH;
 
 #[derive(Clone, Debug)]
 pub struct SigilClient {
@@ -20,9 +23,7 @@ impl SigilClient {
 
     /// Creates a client connecting to the default `$XDG_RUNTIME_DIR/sigil/native.sock`.
     pub fn connect_default() -> Result<Self> {
-        let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").ok_or(ClientError::NoRuntimeDir)?;
-        let path = PathBuf::from(runtime_dir).join(DEFAULT_SOCKET_SUBPATH);
-        Ok(Self::new(path))
+        Ok(Self::new(default_socket_path()))
     }
 
     pub fn socket_path(&self) -> &Path {
@@ -170,6 +171,49 @@ impl SigilClient {
             &IpcRequest::RecoverAndSyncWithCurrentPassword {
                 recovery_secret: recovery_secret.to_string(),
                 new_system_password: new_system_password.to_string(),
+            },
+        )
+        .await?;
+        match read_response(&mut stream).await? {
+            IpcResponse::Success => Ok(()),
+            IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
+            IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
+            other => Err(ClientError::DaemonError(format!(
+                "Unexpected response: {:?}",
+                other
+            ))),
+        }
+    }
+
+    /// Enrolls an emergency recovery key into Slot 1 while the vault is unlocked.
+    pub async fn enroll_recovery_key(&self, recovery_key: &str) -> Result<()> {
+        let mut stream = self.open_stream().await?;
+        write_request(
+            &mut stream,
+            &IpcRequest::EnrollRecoveryKey {
+                recovery_key: recovery_key.to_string(),
+            },
+        )
+        .await?;
+        match read_response(&mut stream).await? {
+            IpcResponse::Success => Ok(()),
+            IpcResponse::Locked => Err(ClientError::Locked),
+            IpcResponse::Error(e) => Err(ClientError::DaemonError(e)),
+            IpcResponse::AccessDenied(e) => Err(ClientError::AccessDenied(e)),
+            other => Err(ClientError::DaemonError(format!(
+                "Unexpected response: {:?}",
+                other
+            ))),
+        }
+    }
+
+    /// Unlocks the vault using the emergency recovery key from Slot 1.
+    pub async fn unlock_with_recovery_key(&self, recovery_key: &str) -> Result<()> {
+        let mut stream = self.open_stream().await?;
+        write_request(
+            &mut stream,
+            &IpcRequest::UnlockWithRecoveryKey {
+                recovery_key: recovery_key.to_string(),
             },
         )
         .await?;

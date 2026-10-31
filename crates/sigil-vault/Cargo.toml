@@ -1,0 +1,22 @@
+[package]
+name = "sigil-vault"
+version.workspace = true
+edition = "2021"
+authors = ["Sigil Project"]
+description = "Multi-slot envelope storage engine and lifecycle service for sigil"
+license.workspace = true
+
+[dependencies]
+sigil-types = { path = "../sigil-types" }
+sigil-crypto = { path = "../sigil-crypto" }
+zeroize = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["sync", "time"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+libc = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

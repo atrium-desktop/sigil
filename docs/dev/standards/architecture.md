@@ -6,26 +6,32 @@ This document codifies the workspace topology, subsystem boundaries, and non-neg
 
 ## 1. Concentric Workspace Topology
 
-Sigil organizes its Cargo workspace into four concentric layers. Dependencies flow strictly from outer layers inward; backward or circular dependencies across layer boundaries are prohibited:
+Sigil organizes its Cargo workspace into five concentric layers ([ADR-0006](../../adr/0006-clean-break-concentric-crate-topology-and-tcb-hardening.md)). Dependencies flow strictly from outer layers inward; backward or circular dependencies across layer boundaries are prohibited:
 
 ```text
-┌──────────────────────────────────────────────────────────────────────┐
-│  Layer 4: Host Daemons & Integration Adapters                        │
-│  - Primary Daemon Binary: `crates/sigil/`                            │
-│  - Native GUI Prompter: `crates/sigil-prompter/`                     │
-│  - PAM Authentication Module: `crates/sigil-pam/`                    │
-├──────────────────────────────────────────────────────────────────────┤
-│  Layer 3: Protocol Adapters & Client SDK                             │
-│  - Secret Service D-Bus Adapter: `crates/sigil-secret-service/`       │
-│  - Native Async Client SDK: `crates/sigil-client/`                   │
-├──────────────────────────────────────────────────────────────────────┤
-│  Layer 2: Core Engine & Vault Lifecycle                              │
-│  - Domain Models, Cryptographic Core, Vault Storage,                 │
-│    and Native IPC Server: `crates/sigil-core/`                       │
-├──────────────────────────────────────────────────────────────────────┤
-│  Layer 1: Wire Protocol & Framing                                    │
-│  - Native IPC Wire Protocol, Codecs & Peer Auth: `crates/sigil-ipc/` │
-└──────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ Layer 4: Executables & System Entrypoints (二进制与系统集成入口层)             │
+│   ├── crates/sigil            (守护进程宿主二进制：组装 Runtime、Hardening、   │
+│   │                            systemd 信号监听、挂载 IPC 与 D-Bus 适配器)     │
+│   ├── crates/sigil-prompter   (Optics GUI 弹窗二进制：纯同步、零 Tokio 依赖)   │
+│   └── crates/sigil-pam        (pam_sigil.so：纯同步、零 Crypto、零 Tokio 依赖) │
+├────────────────────────────────────────────────────────────────────────────────┤
+│ Layer 3: Inbound & Outbound Protocol Adapters (协议适配器与客户端 SDK 层)      │
+│   ├── crates/sigil-ipc-server (Native Unix Socket 服务端适配器 + systemd 激活) │
+│   ├── crates/sigil-dbus-secrets (org.freedesktop.secrets 适配器 + DH/AES 会话) │
+│   └── crates/sigil-client     (Native IPC 客户端 SDK：支持 sync 与 async 特性) │
+├────────────────────────────────────────────────────────────────────────────────┤
+│ Layer 2: Vault Engine & Wire Framing (核心金库引擎与传输帧协议层 - 互不依赖)   │
+│   ├── crates/sigil-vault      (多槽位信封存储 FileStore + 内存态 SigilService) │
+│   └── crates/sigil-ipc        (纯 Wire 协议、帧编解码、SO_PEERCRED、路径解析)  │
+├────────────────────────────────────────────────────────────────────────────────┤
+│ Layer 1: Vault Cryptography (现代金库密码学内核层)                             │
+│   └── crates/sigil-crypto     (LockedKeyBox/mlock, XChaCha20, Argon2id, HKDF)  │
+├────────────────────────────────────────────────────────────────────────────────┤
+│ Layer 0: Foundational Domain & Memory Types (零 I/O 基础领域与安全内存原语层)  │
+│   └── crates/sigil-types      (SecretBytes, LockState, Namespace, Subject,     │
+│                                Purpose, CredentialMetadata, 标准错误语义)      │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Physical layout**: All crates reside within `crates/*`. Zero crates reside directly at the workspace root.
@@ -61,6 +67,9 @@ Sigil organizes its Cargo workspace into four concentric layers. Dependencies fl
 
 ## 3. Crate Addition and Dependency Rules
 
-1. **Acyclic Dependency Invariant**: No lower-layer crate (`sigil-ipc`, `sigil-core`) may ever depend on an upper-layer crate (`sigil`, `sigil-secret-service`, `sigil-prompter`, `sigil-pam`).
-2. **Core Independence**: `sigil-core` must remain independent of GTK, Wayland, or interactive UI presentation libraries.
+1. **Acyclic Dependency Invariant**: No lower-layer crate (`sigil-types`, `sigil-crypto`, `sigil-vault`, `sigil-ipc`) may ever depend on an upper-layer crate (`sigil`, `sigil-ipc-server`, `sigil-dbus-secrets`, `sigil-prompter`, `sigil-pam`).
+2. **Vault Independence**: `sigil-vault` must remain independent of GTK, Wayland, or interactive UI presentation libraries.
 3. **Headless Operability**: All core cryptographic and vault operations must execute in purely headless environments.
+4. **Zero-Async PAM & Prompter ([INV-ARCH-03])**: `sigil-pam` and `sigil-prompter` must never link or depend on Tokio or asynchronous reactor engines.
+5. **D-Bus Session Crypto Isolation ([INV-ARCH-04])**: Legacy D-Bus RFC 2631 Diffie-Hellman and AES-128-CBC session cryptography must remain strictly encapsulated inside `sigil-dbus-secrets`.
+6. **Transport Decoupling ([INV-ARCH-05])**: `sigil-vault` and `sigil-crypto` must never depend on network socket runtimes (`tokio::net`) or wire framing (`sigil-ipc`). Listening sockets belong exclusively in Layer 3 adapters (`sigil-ipc-server`).

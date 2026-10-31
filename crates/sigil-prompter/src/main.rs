@@ -1,7 +1,7 @@
 use clap::Parser;
 use iris::{Application, Config};
 use lens::{Frame, Input, Style, TextBuf};
-use sigil_ipc::{write_request_sync, IpcRequest};
+use sigil_client::SigilSyncClient;
 
 /// Interactive graphical credential prompter for Sigil vault.
 #[derive(Parser, Debug)]
@@ -49,8 +49,22 @@ impl PrompterState {
         if pwd.is_empty() {
             self.error_message = Some("Password cannot be empty.");
         } else {
-            send_password(pwd.to_string());
-            iris::window_close();
+            let res = send_password(pwd);
+            // Immediately wipe password from UI memory buffer with compiler fence
+            self.password.set("");
+            std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+            match res {
+                Ok(_) => {
+                    iris::window_close();
+                }
+                Err(UnlockError::Desynced) => {
+                    self.error_message =
+                        Some("Vault desynchronized! Run 'sigil recover' in terminal to sync.");
+                }
+                Err(_) => {
+                    self.error_message = Some("Incorrect password. Please try again.");
+                }
+            }
         }
     }
 
@@ -123,27 +137,43 @@ impl PrompterState {
     }
 }
 
-fn send_password(password: String) {
-    let socket_path = if let Ok(path) = std::env::var("SIGIL_SOCKET_PATH") {
-        std::path::PathBuf::from(path)
-    } else {
-        let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
-        let candidate = std::path::PathBuf::from(&runtime_dir).join("sigil/native.sock");
-        if candidate.exists() {
-            candidate
-        } else {
-            std::path::PathBuf::from(runtime_dir).join("sigil.sock")
-        }
-    };
+impl Drop for PrompterState {
+    fn drop(&mut self) {
+        self.password.set("");
+        std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+    }
+}
 
-    match std::os::unix::net::UnixStream::connect(&socket_path) {
-        Ok(mut stream) => {
-            let req = IpcRequest::UnlockWithPassword { password };
-            let _ = write_request_sync(&mut stream, &req);
-        }
-        Err(e) => eprintln!(
-            "Failed to connect to daemon socket at {:?}: {}",
-            socket_path, e
-        ),
+enum UnlockError {
+    IncorrectPassword,
+    Desynced,
+}
+
+fn send_password(password: &str) -> Result<(), UnlockError> {
+    let client = SigilSyncClient::connect_default();
+    match client.unlock_with_password(password) {
+        Ok(_) => Ok(()),
+        Err(sigil_client::ClientError::Desynced) => Err(UnlockError::Desynced),
+        Err(_) => Err(UnlockError::IncorrectPassword),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_prompter_state_validation() {
+        let mut state = PrompterState::new();
+        assert_eq!(state.error_message, None);
+
+        // Empty password triggers error
+        state.submit();
+        assert_eq!(state.error_message, Some("Password cannot be empty."));
+
+        // Whitespace only also triggers error
+        state.password = TextBuf::new(256, "   ");
+        state.submit();
+        assert_eq!(state.error_message, Some("Password cannot be empty."));
     }
 }

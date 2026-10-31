@@ -1,0 +1,20 @@
+[package]
+name = "sigil-crypto"
+version.workspace = true
+edition = "2021"
+authors = ["Sigil Project"]
+description = "Core vault cryptographic engine, authenticated cipher suites, and memory-locked containers for sigil"
+license.workspace = true
+
+[dependencies]
+sigil-types = { path = "../sigil-types" }
+chacha20poly1305 = { workspace = true }
+argon2 = { workspace = true }
+hkdf = { workspace = true }
+sha2 = { workspace = true }
+zeroize = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+libc = { workspace = true }

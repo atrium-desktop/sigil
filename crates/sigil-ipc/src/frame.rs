@@ -1,5 +1,6 @@
 use crate::error::{IpcError, IpcResult};
 use crate::protocol::{IpcRequest, IpcResponse, LockState, SecretBytes};
+#[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use zeroize::Zeroize;
 
@@ -17,6 +18,8 @@ pub const OP_UNLOCK_WITH_PASSWORD: u8 = 0x04;
 pub const OP_ROTATE_SLOT_PASSWORD: u8 = 0x05;
 pub const OP_RECOVER_AND_SYNC: u8 = 0x06;
 pub const OP_PING: u8 = 0x07;
+pub const OP_ENROLL_RECOVERY_KEY: u8 = 0x08;
+pub const OP_UNLOCK_WITH_RECOVERY_KEY: u8 = 0x09;
 
 // Response Status Codes
 pub const STATUS_SUCCESS: u8 = 0x00;
@@ -70,6 +73,16 @@ pub fn encode_request(req: &IpcRequest, out: &mut Vec<u8>) -> IpcResult<()> {
             encode_string(&mut p, recovery_secret)?;
             encode_string(&mut p, new_system_password)?;
             (OP_RECOVER_AND_SYNC, p)
+        }
+        IpcRequest::EnrollRecoveryKey { recovery_key } => {
+            let mut p = Vec::with_capacity(recovery_key.len() + 2);
+            encode_string(&mut p, recovery_key)?;
+            (OP_ENROLL_RECOVERY_KEY, p)
+        }
+        IpcRequest::UnlockWithRecoveryKey { recovery_key } => {
+            let mut p = Vec::with_capacity(recovery_key.len() + 2);
+            encode_string(&mut p, recovery_key)?;
+            (OP_UNLOCK_WITH_RECOVERY_KEY, p)
         }
         IpcRequest::Ping => (OP_PING, Vec::new()),
     };
@@ -125,6 +138,16 @@ pub fn decode_request(opcode: u8, payload: &[u8]) -> IpcResult<IpcRequest> {
                 recovery_secret,
                 new_system_password,
             })
+        }
+        OP_ENROLL_RECOVERY_KEY => {
+            let mut offset = 0;
+            let recovery_key = decode_string(payload, &mut offset)?;
+            Ok(IpcRequest::EnrollRecoveryKey { recovery_key })
+        }
+        OP_UNLOCK_WITH_RECOVERY_KEY => {
+            let mut offset = 0;
+            let recovery_key = decode_string(payload, &mut offset)?;
+            Ok(IpcRequest::UnlockWithRecoveryKey { recovery_key })
         }
         OP_PING => Ok(IpcRequest::Ping),
         unknown => Err(IpcError::InvalidOpcode(unknown)),
@@ -250,6 +273,7 @@ fn decode_string(payload: &[u8], offset: &mut usize) -> IpcResult<String> {
 
 // ---------------- Async Network Operations ----------------
 
+#[cfg(feature = "async")]
 pub async fn write_request<W: AsyncWrite + Unpin>(
     writer: &mut W,
     req: &IpcRequest,
@@ -262,6 +286,7 @@ pub async fn write_request<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
+#[cfg(feature = "async")]
 pub async fn read_request<R: AsyncRead + Unpin>(reader: &mut R) -> IpcResult<IpcRequest> {
     let mut header = [0u8; HEADER_LEN];
     reader.read_exact(&mut header).await?;
@@ -289,6 +314,7 @@ pub async fn read_request<R: AsyncRead + Unpin>(reader: &mut R) -> IpcResult<Ipc
     Ok(req)
 }
 
+#[cfg(feature = "async")]
 pub async fn write_response<W: AsyncWrite + Unpin>(
     writer: &mut W,
     resp: &IpcResponse,
@@ -301,6 +327,7 @@ pub async fn write_response<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
+#[cfg(feature = "async")]
 pub async fn read_response<R: AsyncRead + Unpin>(reader: &mut R) -> IpcResult<IpcResponse> {
     let mut header = [0u8; HEADER_LEN];
     reader.read_exact(&mut header).await?;

@@ -50,53 +50,76 @@ sigil/
 ├── Cargo.lock
 │
 ├── crates/
-│   ├── sigil-core/           # Unified engine: domain models, crypto primitives, envelope store, state machine & IPC server
-│   ├── sigil-ipc/            # Lightweight, decoupled wire protocol, framing codecs & peer credential checks
-│   ├── sigil-client/         # Async Rust SDK for desktop components (portal backend, prompter)
-│   ├── sigil-secret-service/ # D-Bus org.freedesktop.secrets protocol adapter
-│   ├── sigil/                # Daemon assembly, process hardening, logind listener
-│   ├── sigil-prompter/       # Native prompt agent for emergency recovery and unlock dialogs (via Optics)
-│   └── sigil-pam/            # Hardened, zero-disk, zero-crypto-dependency PAM module
+│   ├── sigil-types/          # Layer 0: Ubiquitous domain types, safe memory wrappers (SecretBytes, LockState)
+│   ├── sigil-crypto/         # Layer 1: Authenticated modern vault crypto (XChaCha20Poly1305, Argon2id, HKDF, LockedKeyBox)
+│   ├── sigil-vault/          # Layer 2: Envelope multi-slot store (FileVaultStore) & lifecycle engine (SigilService)
+│   ├── sigil-ipc/            # Layer 2: Wire protocol framing, codecs, SO_PEERCRED & socket path locator
+│   ├── sigil-ipc-server/     # Layer 3: Native IPC Unix domain socket listener & systemd socket activation
+│   ├── sigil-dbus-secrets/   # Layer 3: D-Bus org.freedesktop.secrets protocol adapter (encapsulates DH/AES-CBC session crypto)
+│   ├── sigil-client/         # Layer 3: Rust client SDK with dual async/sync APIs
+│   ├── sigil/                # Layer 4: Host daemon assembly, process hardening, logind listener
+│   ├── sigil-prompter/       # Layer 4: Optics GUI unlock dialog (pure sync, zero Tokio dependency)
+│   └── sigil-pam/            # Layer 4: Hardened PAM authentication module pam_sigil.so (pure sync, zero crypto, zero Tokio)
 ```
 
-### `crates/sigil-core` (Layer 2)
-The core engine and persistence layer:
-- **`crypto`**: XChaCha20-Poly1305 AEAD symmetric encryption, Argon2id KDF for password derivation, clean-break HKDF-SHA256 for domain-separated subkeys, and Diffie-Hellman 1024-bit session key negotiation.
-- **`store`**: Envelope Multi-Slot Storage (v2 format). The encrypted vault payload is protected by a 256-bit `VolumeKey` stored in independent envelope key slots (`vault.meta`, `vault.slots/`, `vault.data`). Updates are atomic using atomic file rename semantics.
-- **`service`**: Thread-safe daemon state machine (`Unlocked`, `Locked`, `Uninitialized`). Manages key eviction, auto-provisioning, password rotation, and collection/item CRUD operations.
-- **`server`**: `NativeIpcServer` hosting the Unix domain socket endpoint at `/run/user/<uid>/sigil/native.sock`.
+### `crates/sigil-types` (Layer 0)
+The foundational domain language:
+- **Safe Memory Containers**: `SecretBytes` (`#[zeroize(drop)]`, redacted Debug and Display).
+- **Domain State**: `LockState` (`Uninitialized`, `Locked`, `Unlocked`, `Desynced`).
+- **Domain Identifiers**: `Namespace`, `Subject`, `Purpose`, `CredentialId`, `CredentialMetadata`.
+- **Zero I/O Guarantee**: Zero socket, network, or asynchronous runtime dependencies.
 
-### `crates/sigil-ipc` (Layer 1)
+### `crates/sigil-crypto` (Layer 1)
+Modern vault cryptography:
+- **Envelope Authenticated Cipher**: Constant-time `XChaCha20-Poly1305` AEAD symmetric encryption.
+- **Key Derivation**: `Argon2id` parameter encoding, decoding, and salt generation.
+- **Domain-Separated Subkeys**: `HKDF-SHA256` for portal application secret derivation and per-item AEAD envelope key derivation.
+- **Memory Hardening**: `LockedKeyBox` leveraging `libc::mmap`, `libc::mlock`, and `libc::madvise(..., MADV_DONTDUMP)`.
+
+### `crates/sigil-vault` (Layer 2)
+The vault engine and persistence layer:
+- **`store`**: Envelope Multi-Slot Storage (v2 format). The encrypted vault payload is protected by a 256-bit `VolumeKey` stored in independent envelope key slots (`vault.meta`, `vault.slots/`, `vault.data`). Updates are atomic using atomic file replace semantics (`atomic_replace`).
+- **`service`**: Thread-safe daemon state machine (`Unlocked`, `Locked`, `Uninitialized`, `Desynced`). Manages key eviction, auto-provisioning, password rotation, recovery sync, and collection/item CRUD operations.
+
+### `crates/sigil-ipc` (Layer 2)
 Lightweight wire framing and IPC codecs:
-- **Wire Codecs**: Zero-allocation binary framing (`sigil-wire-v2`) with 4-byte length prefix.
-- **Security Primitives**: Kernel-level `SO_PEERCRED` extraction verifying peer PID, UID, and GID. Enforces that only matching UID callers access the socket.
-- **Payloads**: Request and response enumerations covering Ping, Status, Unlock, Lock, DerivePortalSecret, and RotatePassword.
+- **Wire Codecs**: Zero-allocation binary framing (`sigil-wire-v2`) with 8-byte header and length prefix.
+- **Security Primitives**: Kernel-level `SO_PEERCRED` extraction verifying peer PID, UID, and GID. Enforces that only matching UID callers or root access the socket.
+- **Socket Path Locator**: Canonical `default_socket_path()`, `socket_path_for_uid(uid)`, and `resolve_socket_path()`.
+- **Feature-Gated Runtime**: Default `async` with optional pure `sync` profile eliminating Tokio from synchronous consumers.
 
-### `crates/sigil-client` (Layer 3)
-Async Rust client library:
-- Connects to `/run/user/<uid>/sigil/native.sock`.
-- Provides idiomatic async methods for desktop services and portals (`derive_portal_secret`, `query_status`, `unlock`).
+### `crates/sigil-ipc-server` (Layer 3)
+Native Unix domain socket server:
+- Hosts the native socket endpoint at `/run/user/<uid>/sigil/native.sock`.
+- Adopts systemd socket activation on file descriptor 3 (`LISTEN_FDS`).
+- Enforces `SO_PEERCRED` checks on every connection and dispatches to `SigilService`.
 
-### `crates/sigil-secret-service` (Layer 3)
+### `crates/sigil-dbus-secrets` (Layer 3)
 Secret Service D-Bus adapter:
 - Implements freedesktop.org Secret Service specification over `zbus`.
-- Translates D-Bus object paths (`/org/freedesktop/secrets/collection/...`) and method calls into `sigil-core` operations.
-- Handles standard session negotiation (Plain and DH-AES algorithms).
+- Translates D-Bus object paths (`/org/freedesktop/secrets/collection/...`) and method calls into `sigil-vault` operations.
+- Encapsulates legacy RFC 2631 Diffie-Hellman (1024-bit MODP) and AES-128-CBC session negotiation.
+
+### `crates/sigil-client` (Layer 3)
+Rust client library with dual APIs:
+- **`SigilClient`**: Async client for asynchronous daemons and portal backends.
+- **`SigilSyncClient`**: Pure synchronous client for CLI tools, PAM, and GUI prompters without Tokio runtime dependencies.
 
 ### `crates/sigil` (Layer 4)
 The host daemon binary:
-- **Process Hardening**: Explicitly disables core dumps and ptrace attachments (`PR_SET_DUMPABLE=0`, `RLIMIT_CORE=0`).
+- **Process Hardening**: Explicitly disables core dumps and ptrace attachments (`PR_SET_DUMPABLE=0`, `RLIMIT_CORE=0`, `mlockall`).
 - **Lifecycle Integration**: Subscribes to `org.freedesktop.login1` signals (`Session.Lock` and `Active=false`) to instantly zeroize master keys upon lock or fast user switching.
-- **Startup Coordination**: Listens on systemd user socket activation (`sigil.socket`).
+- **Startup Coordination**: Mounts `sigil-ipc-server` and `sigil-dbus-secrets` over the unified `SigilService`.
 
 ### `crates/sigil-prompter` (Layer 4)
 Interactive dialog agent:
 - Rendered using companion GUI engine **Optics** (`flux`, `iris`, `lens`).
 - Invoked when user input is required in GUI sessions (e.g., initial master passphrase entry or recovery unlock).
+- Pure synchronous execution with zero Tokio dependency.
 
 ### `crates/sigil-pam` (Layer 4)
 Pluggable Authentication Module (`pam_sigil.so`):
-- **Zero-Disk, Zero-Crypto**: Contains no cryptographic libraries and never touches disk.
+- **Zero-Disk, Zero-Crypto, Zero-Tokio**: Contains no cryptographic libraries, no asynchronous runtimes, and never touches disk.
 - **Authentication**: Bypasses system accounts (`uid < 1000`). Passes login passphrase directly over the Unix socket in memory.
 - **Auto-Provisioning**: On first login, triggers zero-friction initial vault generation.
 - **Password Rotation**: During `pam_sm_chauthtok`, captures old and new passphrases to execute an $O(1)$ envelope slot rotation.

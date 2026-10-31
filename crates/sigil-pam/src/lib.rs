@@ -1,8 +1,7 @@
 use pamsm::{pam_module, Pam, PamError, PamFlag, PamLibExt, PamServiceModule};
-use sigil_ipc::{read_response_sync, write_request_sync, IpcRequest};
+use sigil_ipc::{read_response_sync, socket_path_for_uid, write_request_sync, IpcRequest};
 use std::ffi::{CStr, CString};
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
 use std::time::Duration;
 use zeroize::Zeroize;
 
@@ -24,30 +23,50 @@ fn get_target_uid(pamh: &Pam) -> Option<u32> {
 
     let mut pwd: libc::passwd = unsafe { std::mem::zeroed() };
     let mut result: *mut libc::passwd = std::ptr::null_mut();
-    let mut buf = vec![0 as libc::c_char; 2048];
 
-    let ret = unsafe {
-        libc::getpwnam_r(
-            c_user.as_ptr(),
-            &mut pwd,
-            buf.as_mut_ptr(),
-            buf.len(),
-            &mut result,
-        )
+    let initial_bufsize = unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) };
+    let mut bufsize = if initial_bufsize > 0 {
+        initial_bufsize as usize
+    } else {
+        4096
     };
 
-    if ret != 0 || result.is_null() {
-        return None;
+    let mut buf = vec![0 as libc::c_char; bufsize];
+    loop {
+        let ret = unsafe {
+            libc::getpwnam_r(
+                c_user.as_ptr(),
+                &mut pwd,
+                buf.as_mut_ptr(),
+                buf.len(),
+                &mut result,
+            )
+        };
+
+        if ret == libc::ERANGE && bufsize < 65536 {
+            bufsize *= 2;
+            buf.resize(bufsize, 0);
+            continue;
+        }
+
+        if ret != 0 || result.is_null() {
+            return None;
+        }
+
+        break;
     }
 
     let uid = pwd.pw_uid;
 
-    // Strict system account filter
-    if uid < UID_MIN || uid == NOBODY_UID {
+    if is_system_uid(uid) {
         return None;
     }
 
     Some(uid)
+}
+
+fn is_system_uid(uid: u32) -> bool {
+    uid < UID_MIN || uid == NOBODY_UID
 }
 
 /// Emits an audit message to the system authentication syslog facility.
@@ -66,7 +85,7 @@ fn log_pam(msg: &str) {
 /// Connects to the user's sigil native socket. If `wait` is true, polls with responsive
 /// backoff to accommodate user session socket creation during cold boot or first login.
 fn connect_to_socket(uid: u32, wait: bool) -> Option<UnixStream> {
-    let socket_path = PathBuf::from(format!("/run/user/{}/sigil/native.sock", uid));
+    let socket_path = socket_path_for_uid(uid);
 
     // Fast path: Screen locker or already active session.
     // Zero delay, single non-blocking check.
@@ -105,12 +124,17 @@ fn connect_to_socket(uid: u32, wait: bool) -> Option<UnixStream> {
 }
 
 /// Cleanup callback for stashed authentication token data in PAM handle context.
-/// Cryptographically zeroizes the memory buffer when replaced or freed by PAM.
+/// Cryptographically zeroizes the memory buffer with a volatile barrier when replaced or freed by PAM.
 #[allow(clippy::ptr_arg)]
 fn cleanup_stashed_authtok(data: &Vec<u8>, _pam: Pam, _flags: i32, _status: PamError) {
-    unsafe {
-        let ptr = data.as_ptr() as *mut u8;
-        std::ptr::write_bytes(ptr, 0, data.len());
+    if !data.is_empty() {
+        unsafe {
+            let ptr = data.as_ptr() as *mut u8;
+            for i in 0..data.len() {
+                std::ptr::write_volatile(ptr.add(i), 0);
+            }
+            std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+        }
     }
 }
 
@@ -306,3 +330,20 @@ impl PamServiceModule for SigilPam {
 }
 
 pam_module!(SigilPam);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_system_uid() {
+        assert!(is_system_uid(0));
+        assert!(is_system_uid(1));
+        assert!(is_system_uid(999));
+        assert!(is_system_uid(65534)); // nobody
+
+        assert!(!is_system_uid(1000));
+        assert!(!is_system_uid(1001));
+        assert!(!is_system_uid(2000));
+    }
+}

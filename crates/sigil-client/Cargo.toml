@@ -1,20 +1,28 @@
 [package]
 name = "sigil-client"
-version = "0.1.1"
+version.workspace = true
 edition = "2021"
 authors = ["Sigil Project"]
-description = "Async client library for sigil native IPC"
+description = "Client library for sigil native IPC (sync and async)"
 license.workspace = true
 
+[features]
+default = ["async"]
+async = ["dep:tokio", "sigil-ipc/async"]
+sync = ["sigil-ipc/sync"]
+
 [dependencies]
-sigil-ipc = { path = "../sigil-ipc" }
-tokio = { workspace = true, features = ["net", "io-util", "sync", "time"] }
+sigil-types = { path = "../sigil-types" }
+sigil-ipc = { path = "../sigil-ipc", default-features = false }
+tokio = { workspace = true, features = ["net", "io-util", "sync", "time"], optional = true }
 thiserror = { workspace = true }
 zeroize = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 
 [dev-dependencies]
-sigil-core = { path = "../sigil-core" }
+sigil-crypto = { path = "../sigil-crypto" }
+sigil-vault = { path = "../sigil-vault" }
+sigil-ipc-server = { path = "../sigil-ipc-server" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 zbus = { workspace = true }
 libc = { workspace = true }

@@ -1,18 +1,24 @@
 [package]
 name = "sigil-ipc"
-version = "0.1.1"
+version.workspace = true
 edition = "2021"
 authors = ["Sigil Project"]
 description = "Native IPC wire protocol, framing codecs, and peer verification for sigil"
 license.workspace = true
 
+[features]
+default = ["async"]
+sync = []
+async = ["dep:tokio"]
+
 [dependencies]
+sigil-types = { path = "../sigil-types" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true }
-tokio = { workspace = true, features = ["io-util", "net"] }
 zeroize = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["io-util", "net"], optional = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "io-util", "net"] }

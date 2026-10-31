@@ -1,13 +1,14 @@
+pub mod endpoint;
 pub mod error;
 pub mod frame;
 pub mod peer;
 pub mod protocol;
 
-pub use error::{IpcError, IpcResult};
-pub use frame::{
-    read_request, read_request_sync, read_response, read_response_sync, write_request,
-    write_request_sync, write_response, write_response_sync, MAX_FRAME_SIZE,
+pub use endpoint::{
+    default_socket_path, resolve_socket_path, socket_path_for_uid, DEFAULT_SOCKET_SUBPATH,
 };
+pub use error::{IpcError, IpcResult};
+pub use frame::*;
 pub use peer::check_peer_credentials;
 pub use protocol::{IpcRequest, IpcResponse, LockState, PromptResponse, SecretBytes};
 
@@ -27,6 +28,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "async")]
     async fn test_async_frame_roundtrip() {
         let resp = IpcResponse::Success;
         let mut buf = Vec::new();

@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Terminal Client Parity (ADR-0008)**: Added full CLI client subcommands allowing seamless command-line control of the running daemon over native IPC:
+  - `sigil status`: Queries daemon liveness, lock status, active socket, and storage paths.
+  - `sigil unlock`: Unlocks running daemon or local store with safe terminal echo suppression (`read_password_prompt`) and zeroizing memory buffer.
+  - `sigil lock`: Sends instant lock command, clearing master key from memory.
+  - `sigil recover`: Re-encrypts Slot 0 and re-synchronizes a desynchronized vault using previous password or recovery key.
+- **Pre-flight Diagnostic Doctor (`sigil doctor`, ADR-0008)**: Comprehensive diagnostic suite that inspects D-Bus name ownership, active conflicting keyrings (`gnome-keyring`, `kwallet`), systemd socket state, storage permissions, graphical display variables, and PAM module placement.
+- **Emergency Recovery Key (Slot 1, ADR-0008)**: Implemented multi-slot emergency recovery key generation and enrollment (`sigil recovery-key generate` / `verify`). Uses 160 bits of OsRng entropy encoded into typo-tolerant Crockford Base32 with automatic normalization, sealing Slot 1 to guarantee data recovery in out-of-band password desync events.
+- **External Credential Migration Tool (`sigil import-credentials`, ADR-0008)**: Added bulk import for JSON and CSV credential archives with attribute tagging into target collections under exclusive `flock` protection.
+- **Headless & SSH Display Detection**: `org.freedesktop.Secret.Prompt` now performs display environment pre-flight; if neither `WAYLAND_DISPLAY` nor `DISPLAY` is detected, it fails fast with clear remediation logs instead of stalling callers for 60 seconds.
+- **Prompter UI Memory Zeroization**: Implemented `Drop for PrompterState` and explicit memory wiping in `sigil-prompter` using compiler barriers to eliminate sensitive password fragments in GUI buffers.
+- **Interactive D-Bus Prompt Lifecycle (ADR-0007)**: Full compliance with the `org.freedesktop.Secret.Prompt` specification. Calling `Service.Unlock` while locked returns a dynamic, unique Prompt object (`/org/freedesktop/secrets/prompt/p_<id>`). When prompted, Sigil spawns `sigil-prompter` on demand, tracks unlock status, emits `Completed` signals, and automatically deregisters completed prompts from the D-Bus ObjectServer.
+- **POSIX `flock` Multi-Process Protection (ADR-0007)**: All mutating operations across slots, metadata, and bulk payloads in `FileVaultStore` now acquire an exclusive `flock(LOCK_EX)` on `.vault.lock`, preventing concurrent race conditions and clobbering across multiple processes.
+- **Native Disaster Recovery CLI (ADR-0007)**: Added `sigil export-vault` and `sigil import-vault` subcommands supporting authenticated Argon2id + XChaCha20-Poly1305 encrypted envelope archives (`sigil-backup-v1`) for portable offline backups.
+- **Volatile Memory Zeroization Barriers (ADR-0007)**: Added volatile writes and `compiler_fence(Ordering::SeqCst)` to `LockedKeyBox`, ephemeral Diffie-Hellman private keys (`DhSession`), and PAM authentication token cleanup callbacks to eliminate compiler dead-store elimination risks.
+
+### Fixed
+- **Collection Label Mutation**: Fixed `Collection.set_label` to mutate existing collections in-place instead of erroneously invoking `create_collection` and crashing with `AlreadyExists`.
+- **D-Bus Object Deregistration**: Deleting collections or items via `Collection.Delete` and `Item.Delete` now explicitly removes their object paths from the zbus `ObjectServer`, eliminating ghost paths and dangling object leaks on the session bus.
+- **Accurate Timestamps**: `Collection` and `Item` now record and report real POSIX UTC timestamps (`created_at`, `modified_at`).
+
+### Architecture
+- **5-Layer Concentric Topology (ADR-0006)**: Restructured workspace into 10 decoupled, single-responsibility crates with strict inward dependency flow:
+  - Layer 0: `sigil-types` (Zero I/O domain types, `SecretBytes`, `LockState`, `Namespace`, `Subject`, `Purpose`).
+  - Layer 1: `sigil-crypto` (Modern vault cryptography: `XChaCha20Poly1305`, `Argon2id`, `HKDF-SHA256`, `LockedKeyBox`, Crockford recovery key).
+  - Layer 2: `sigil-vault` (Pure envelope multi-slot persistence & lifecycle state machine) and `sigil-ipc` (Wire framing, codecs, socket locator).
+  - Layer 3: `sigil-ipc-server` (Native Unix domain socket listener & systemd activation), `sigil-dbus-secrets` (D-Bus Secret Service adapter encapsulating legacy DH/AES-CBC session crypto), and `sigil-client` (Dual async/sync client SDK).
+  - Layer 4: `sigil` (Host daemon & client CLI), `sigil-prompter` (Optics GUI prompter), and `sigil-pam` (`pam_sigil.so`).
+- **TCB Minimization & Zero-Async in PAM/Prompter**: Feature-gated `sigil-ipc` and `sigil-client` (`sync` / `async`); completely eliminated Tokio and asynchronous runtime dependencies from `pam_sigil.so` and `sigil-prompter`.
+- **Unified Workspace Lockstep Versioning**: All 10 crates unified under root workspace `version = "1.4.0"` via `version.workspace = true`.
+- **Abolition of Legacy Persistence Shims**: Permanently removed deprecated pre-envelope single-file migration logic (`vault.enc`, `vault.kdf`, `vault.salt`) and unencrypted secret fields (`legacy_secret`).
+
 ## [1.3.11] - 2026-10-30
 
 ### Documentation

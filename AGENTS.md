@@ -5,7 +5,7 @@
 - **Command Termination**: All commands MUST be finite and self-terminating. Never start background daemons or unbounded loops without a strict timeout.
 
 ## 2. Core Mental Model & Subsystem Boundaries
-- **Concentric Architecture**: Sigil organizes its workspace into four concentric layers (`sigil-ipc` -> `sigil-core` -> `sigil-client` / `sigil-secret-service` -> `sigil` / `sigil-prompter` / `sigil-pam`). Dependencies flow strictly inward.
+- **Concentric Architecture**: Sigil organizes its workspace into five concentric layers (`sigil-types` -> `sigil-crypto` -> `sigil-vault` / `sigil-ipc` -> `sigil-ipc-server` / `sigil-dbus-secrets` / `sigil-client` -> `sigil` / `sigil-prompter` / `sigil-pam`). Dependencies flow strictly inward.
 - **Dual-Sovereign Architecture**: Decouples sandboxed portal secret derivation (`org.freedesktop.portal.Secret`) from native host collaboration (`org.freedesktop.secrets`). Portal callers receive clean-break mathematical HKDF derivations and must never access the master volume key or keyring collection items.
 - **Memory-First Hardening**: Process dumpability is explicitly disabled (`PR_SET_DUMPABLE = 0`, `RLIMIT_CORE = 0`). Any struct holding secret keys or plaintext buffers MUST implement `zeroize::Zeroize` and trigger zeroization on drop (`#[zeroize(drop)]`).
 - **Native IPC vs. D-Bus Isolation**: High-privilege lifecycle operations (unlock, slot rotation, portal master secret derivation) are routed exclusively through `/run/user/<uid>/sigil/native.sock`. The socket enforces kernel-level `SO_PEERCRED` checks on every connection.

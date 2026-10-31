@@ -1,17 +1,23 @@
 [package]
 name = "sigil"
-version = "1.3.11"
+version.workspace = true
 edition = "2021"
 authors = ["Sigil Project"]
 description = "Desktop session credential infrastructure daemon"
 license.workspace = true
 
 [dependencies]
-sigil-core = { path = "../sigil-core" }
+sigil-types = { path = "../sigil-types" }
+sigil-crypto = { path = "../sigil-crypto" }
+sigil-vault = { path = "../sigil-vault" }
 sigil-ipc = { path = "../sigil-ipc" }
-sigil-secret-service = { path = "../sigil-secret-service" }
+sigil-ipc-server = { path = "../sigil-ipc-server" }
+sigil-dbus-secrets = { path = "../sigil-dbus-secrets" }
+sigil-client = { path = "../sigil-client", features = ["async", "sync"] }
 tokio = { workspace = true }
 zbus = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 directories = { workspace = true }

@@ -1,0 +1,11 @@
+[package]
+name = "sigil-types"
+version.workspace = true
+edition = "2021"
+authors = ["Sigil Project"]
+description = "Foundational domain types, safe memory containers, and state primitives for sigil"
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+zeroize = { workspace = true, features = ["derive"] }

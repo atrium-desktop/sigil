@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.4.0] - 2026-10-31
 
 ### Added
 - **Terminal Client Parity (ADR-0008)**: Added full CLI client subcommands allowing seamless command-line control of the running daemon over native IPC:
